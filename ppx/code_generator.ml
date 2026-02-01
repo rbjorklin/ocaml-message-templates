@@ -61,10 +61,11 @@ let rec yojson_of_value ~loc (expr : expression) (ty : core_type option) =
         | None -> `Null
         | Some x -> [%e elem_converter]]
   | _ ->
-      (* Fallback: use runtime helper for backward compatibility. Note: Type
-         info is not available at PPX stage, so this is always used. The runtime
-         helper uses Obj module but provides proper type detection. *)
-      [%expr `String (Message_templates.Runtime_helpers.to_string [%e expr])]
+      (* Fallback: use runtime helper for backward compatibility. Note: When
+         type information is not available at compile time, we use runtime type
+         detection. For best results, use explicit type annotations in your
+         templates. *)
+      [%expr Message_templates.Runtime_helpers.any_to_json [%e expr]]
 ;;
 
 (** Apply operator-specific transformations *)
@@ -109,7 +110,8 @@ let generate_template_code ~loc scope parts =
               match h.operator with
               | Stringify ->
                   (* Convert to string using runtime helper *)
-                  [%expr Message_templates.Runtime_helpers.to_string [%e var]]
+                  [%expr
+                    Message_templates.Runtime_helpers.any_to_string [%e var]]
               | _ ->
                   (* Use directly - format specifiers handle type conversion *)
                   var

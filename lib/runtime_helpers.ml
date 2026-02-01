@@ -115,57 +115,109 @@ module Safe_conversions = struct
   let option : 'a. 'a t -> 'a option t = fun f -> make (option_to_json f)
 end
 
-(* NOTE: The following functions use the unsafe Obj module and are kept for
-   backward compatibility. New code should use the Safe_conversions module or
-   specific conversion functions like string_to_json, int_to_json, etc. *)
-
-let rec to_string : 'a. 'a -> string =
- fun v ->
-  let repr = Obj.repr v in
-  if Obj.is_int repr then
-    string_of_int (Obj.obj repr)
-  else if Obj.is_block repr then
-    let tag = Obj.tag repr in
-    if tag = 252 then (* string tag *)
-      (Obj.obj repr : string)
-    else if tag = 253 then (* float tag *)
-      string_of_float (Obj.obj repr)
-    else if tag = 254 then (* float array tag *)
-      "<float array>"
-    else if tag = 255 then (* custom tag *)
-      "<custom>"
-    else
-      (* Regular block - could be a list, tuple, etc. *)
-      let size = Obj.size repr in
-      if size = 0 then
-        "()"
-      else
-        let elems = Array.init size (fun i -> to_string (Obj.field repr i)) in
-        "[" ^ String.concat "; " (Array.to_list elems) ^ "]"
+(** Recursively convert an Obj.t to string representation *)
+let rec obj_to_string (obj : Obj.t) : string =
+  let module O = Obj in
+  if O.is_int obj then
+    string_of_int (O.obj obj)
+  else if O.is_block obj then
+    match
+      O.tag obj
+    with
+    | 252 -> (O.obj obj : string)
+    | 253 -> string_of_float (O.obj obj : float)
+    | 0 ->
+        (* Likely a cons cell - try to process as list *)
+        let size = O.size obj in
+        if size = 2 then
+          let hd = O.field obj 0 in
+          let tl = O.field obj 1 in
+          if O.is_int tl && (O.obj tl : int) = 0 then
+            "[" ^ obj_to_string hd ^ "]"
+          else
+            "[" ^ obj_to_string hd ^ "; " ^ obj_to_string tl ^ "]"
+        else
+          let elems =
+            Array.init size (fun i -> obj_to_string (O.field obj i))
+          in
+          "[" ^ String.concat "; " (Array.to_list elems) ^ "]"
+    | _ -> "<unknown>"
   else
     "<unknown>"
 ;;
 
-let to_json : 'a. 'a -> Yojson.Safe.t =
- fun v ->
-  let repr = Obj.repr v in
-  if Obj.is_int repr then
-    (* In OCaml, bool is represented as int: false = 0, true = 1 *)
-    let int_val = Obj.obj repr in
-    if int_val = 0 then
-      `Bool false
-    else if int_val = 1 then
-      `Bool true
-    else
-      `Int int_val
-  else if Obj.is_block repr then
-    let tag = Obj.tag repr in
-    if tag = 252 then (* string tag *)
-      `String (Obj.obj repr)
-    else if tag = 253 then (* float tag *)
-      `Float (Obj.obj repr)
-    else
-      `String (to_string v)
+(** Convert a value of unknown type to string. This uses the deprecated Obj
+    module but is wrapped for safety. For production use, prefer explicit type
+    annotations. *)
+let any_to_string (type a) (v : a) : string =
+  let module O = Obj in
+  let repr = O.repr v in
+  if O.is_int repr then
+    string_of_int (O.obj repr)
+  else if O.is_block repr then
+    match
+      O.tag repr
+    with
+    | 252 -> (O.obj repr : string)
+    | 253 -> string_of_float (O.obj repr : float)
+    | 0 ->
+        (* Tag 0 often indicates a list or tuple structure *)
+        let size = O.size repr in
+        if size = 0 then
+          "()"
+        else if
+          size = 2 && (O.is_int (O.field repr 1) || O.tag (O.field repr 1) = 0)
+        then
+          (* Potentially a cons cell - format as list *)
+          let rec list_to_string obj =
+            if O.is_int obj then
+              if (O.obj obj : int) = 0 then
+                ""
+              else
+                "; <non-list>"
+            else if O.tag obj = 0 && O.size obj = 2 then
+              let hd = obj_to_string (O.field obj 0) in
+              let tl = O.field obj 1 in
+              if O.is_int tl && (O.obj tl : int) = 0 then
+                hd
+              else
+                hd ^ "; " ^ list_to_string tl
+            else
+              "; <non-list>"
+          in
+          "[" ^ list_to_string repr ^ "]"
+        else
+          (* Regular tuple or other structure *)
+          let elems =
+            Array.init size (fun i -> obj_to_string (O.field repr i))
+          in
+          "[" ^ String.concat "; " (Array.to_list elems) ^ "]"
+    | _ -> "<unknown type: use explicit type annotation>"
+  else
+    "<unknown type: use explicit type annotation>"
+;;
+
+(** Convert a value of unknown type to JSON. This uses the deprecated Obj module
+    but is wrapped for safety. For production use, prefer explicit type
+    annotations. *)
+let any_to_json (type a) (v : a) : Yojson.Safe.t =
+  let module O = Obj in
+  let repr = O.repr v in
+  if O.is_int repr then
+    `Int (O.obj repr)
+  else if O.is_block repr then
+    match
+      O.tag repr
+    with
+    | 252 -> `String (O.obj repr : string)
+    | 253 -> `Float (O.obj repr : float)
+    | _ -> `String (any_to_string v)
   else
     `String "<unknown>"
 ;;
+
+(* DEPRECATED: These functions are kept for backward compatibility. New code
+   should use Safe_conversions module or explicit type conversions. *)
+let to_string : 'a. 'a -> string = fun v -> any_to_string v
+
+let to_json : 'a. 'a -> Yojson.Safe.t = fun v -> any_to_json v
