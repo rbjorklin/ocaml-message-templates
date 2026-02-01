@@ -113,7 +113,14 @@ let format_output t (event : Log_event.t) =
   let result = Str.global_replace (Str.regexp "{timestamp}") timestamp_str result in
   let result = Str.global_replace (Str.regexp "{level}") level_str result in
   let result = Str.global_replace (Str.regexp "{message}") message_str result in
-  result
+  
+  (* Append properties as JSON if any exist *)
+  let props = Log_event.get_properties event in
+  if props = [] then
+    result
+  else
+    let json_props = `Assoc props in
+    result ^ " " ^ (Yojson.Safe.to_string json_props)
 
 (** Emit a log event *)
 let emit t event =

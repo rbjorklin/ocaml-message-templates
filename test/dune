@@ -30,3 +30,9 @@
  (libraries
   message-templates
   alcotest))
+
+(test
+ (name test_logger)
+ (libraries
+  message-templates
+  alcotest))

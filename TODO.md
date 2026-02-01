@@ -41,26 +41,30 @@ Implementing comprehensive logging infrastructure modeled after Serilog.
 **Deliverables:**
 - [x] `lib/sink.mli` - Sink interface
 - [x] `lib/console_sink.ml` - Console output with colors
-- [x] `lib/file_sink.ml` - File output with rolling (Infinite, Daily, Hourly)
+- [x] `lib/file_sink.ml` - File output with rolling (Infinite, Daily, Hourly) and JSON properties
 - [x] `lib/composite_sink.ml` - Multiple sinks support
 - [x] `lib/null_sink.ml` - Testing sink
 - [x] `test/test_sinks.ml` - Tests (6 tests passing)
 
-### Phase 3: Logger Implementation 🔄 IN PROGRESS
+### Phase 3: Logger Implementation ✅ COMPLETE
 
 **Goals:**
-- Define LOGGER signature
-- Implement Logger module with level checking
-- Add ForContext support for contextual logging
-- Implement enrichment pipeline
+- [x] Define LOGGER signature
+- [x] Implement Logger module with level checking
+- [x] Add ForContext support for contextual logging
+- [x] Implement enrichment pipeline
 
 **Deliverables:**
-- `lib/logger.mli` - Logger interface
-- `lib/logger.ml` - Logger implementation
-- `lib/enricher.ml` - Enricher system
-- `test/test_logger.ml` - Tests
+- [x] `lib/logger.mli` - Logger interface with S, ENRICHER, and FILTER signatures
+- [x] `lib/logger.ml` - Logger implementation with:
+  - Level-based filtering (fast path)
+  - Context properties support
+  - Enricher pipeline
+  - Multiple filters
+  - Level-specific methods (verbose, debug, information, warning, error, fatal)
+- [x] `test/test_logger.ml` - Tests (7 tests passing)
 
-### Phase 4: Configuration API 📋 PENDING
+### Phase 4: Configuration API 🔄 IN PROGRESS
 
 **Goals:**
 - Implement Configuration module with fluent API
@@ -122,14 +126,13 @@ lib/
 ├── log_event.ml            # ✅ Log event type
 ├── sink.mli                # ✅ Sink interface
 ├── console_sink.ml         # ✅ Console output
-├── file_sink.ml            # ✅ File output with rolling
+├── file_sink.ml            # ✅ File output with rolling + JSON properties
 ├── composite_sink.ml       # ✅ Multiple sinks
 ├── null_sink.ml            # ✅ Testing sink
-├── logger.mli              # Logger interface (in progress)
-├── logger.ml               # Logger implementation (pending)
-├── enricher.ml             # Enrichment system (pending)
-├── filter.ml               # Filtering predicates (pending)
-├── configuration.ml        # Configuration builder (pending)
+├── logger.mli              # ✅ Logger interface
+├── logger.ml               # ✅ Logger implementation
+├── configuration.ml        # Configuration builder (in progress)
+├── filter.ml               # Filter predicates (pending)
 ├── log_context.ml          # Ambient context (pending)
 ├── log.ml                  # Global logger (pending)
 ├── types.ml                # Template AST types
@@ -144,6 +147,7 @@ ppx/
 test/
 ├── test_level.ml           # ✅ Level tests (6 passing)
 ├── test_sinks.ml           # ✅ Sink tests (6 passing)
+├── test_logger.ml          # ✅ Logger tests (7 passing)
 ├── test_parser.ml          # Parser tests (5 passing)
 └── test_ppx_comprehensive.ml   # PPX tests (8 passing)
 ```
@@ -152,9 +156,10 @@ test/
 
 ## Test Status
 
-**Total Tests**: 25 passing ✅
+**Total Tests**: 32 passing ✅
 - Level Tests: 6/6 ✅
 - Sink Tests: 6/6 ✅
+- Logger Tests: 7/7 ✅
 - Parser Tests: 5/5 ✅
 - PPX Comprehensive Tests: 8/8 ✅
 
@@ -180,6 +185,39 @@ test/
 
 **Phase 1**: ✅ Complete (Level and Log_event modules)
 **Phase 2**: ✅ Complete (All sinks implemented and tested)
+**Phase 3**: ✅ Complete (Logger with level checking, context, enrichers)
+**Phase 4**: 🔄 In Progress (Configuration API)
 **Overall**: Phase 7 of Logging Infrastructure Implementation
-**Tests**: 25/25 passing
+**Tests**: 32/32 passing
 **Date**: 2026-01-31
+
+---
+
+## Logger API Example
+
+```ocaml
+open Message_templates
+
+(* Create a logger *)
+let logger =
+  let file_sink = File_sink.create "app.log" in
+  let sink = {
+    Composite_sink.emit_fn = (fun e -> File_sink.emit file_sink e);
+    flush_fn = (fun () -> File_sink.flush file_sink);
+    close_fn = (fun () -> File_sink.close file_sink);
+  } in
+  Logger.create ~min_level:Level.Information ~sinks:[sink]
+
+(* Log messages *)
+Logger.information logger "User {user} logged in" ["user", `String "alice"]
+
+(* Add context *)
+let ctx_logger = Logger.for_context logger "RequestId" (`String "abc-123")
+Logger.information ctx_logger "Processing request" []
+
+(* Add enricher *)
+let enriched = Logger.with_enricher logger (fun event ->
+  (* Add timestamp or other properties *)
+  event
+)
+```
