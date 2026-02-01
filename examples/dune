@@ -9,13 +9,15 @@
 
 (executables
  (names
-  logging_basic
-  logging_advanced
-  logging_ppx)
- (modules logging_basic logging_advanced logging_ppx)
+   logging_basic
+   logging_advanced
+   logging_ppx
+   logging_clef_json
+   logging_clef_ppx)
+ (modules logging_basic logging_advanced logging_ppx logging_clef_json logging_clef_ppx)
  (libraries
-  message-templates
-  message-templates-ppx
-  yojson
-  unix)
+   message-templates
+   message-templates-ppx
+   yojson
+   unix)
  (preprocess (pps message-templates-ppx)))
