@@ -234,6 +234,7 @@ All log events follow CLEF (Compact Log Event Format):
 ## Notes
 
 - **Always run tests after changes**: `dune runtest`
+- **Always format file after editing**: `ocamlformat --inplace <filename>`
 - **Template variables must be in scope**: PPX validates at compile time
 - **Two output formats**: String for display, JSON for structured logging
 - **Level checking is fast-path**: Minimal overhead when disabled
