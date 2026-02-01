@@ -1,4 +1,5 @@
 (lang dune 3.0)
+(using mdx 0.2)
 (name message-templates)
 (version 0.1.0)
 (generate_opam_files true)
@@ -26,8 +27,9 @@
    (yojson (>= 2.0.0))
    (eio (>= 1.0))
    (ptime (>= 1.0))
-   (alcotest :with-test)
-   (qcheck :with-test)))
+    (alcotest :with-test)
+    (qcheck :with-test)
+    (mdx :with-test)))
 
 (package
  (name message-templates-ppx)

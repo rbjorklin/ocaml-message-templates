@@ -8,6 +8,7 @@ module Log_event = Log_event
 module Sink = Sink
 module Console_sink = Console_sink
 module File_sink = File_sink
+module Json_sink = Json_sink
 module Null_sink = Null_sink
 module Composite_sink = Composite_sink
 module Logger = Logger

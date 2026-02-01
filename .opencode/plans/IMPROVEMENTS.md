@@ -1183,9 +1183,9 @@ This improvement plan addresses critical gaps in testing, eliminates unsafe code
 - [x] 3.5 Unify template parser (COMPLETE - Already unified, both runtime and PPX use lib/template_parser.ml)
 
 ### Phase 4
-- [ ] 4.1 Generate API documentation
-- [ ] 4.2 Create migration guide
-- [ ] 4.3 Create deployment guide
+- [x] 4.1 Generate API documentation (COMPLETE - All .mli files created with odoc comments, odoc generates successfully)
+- [x] 4.2 Create migration guide (COMPLETE - MIGRATION.md created with examples for logs, dolog, and Printf)
+- [x] 4.3 Create deployment guide (COMPLETE - DEPLOYMENT.md with production checklist, tuning, security)
 
 ---
 
