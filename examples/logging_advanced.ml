@@ -62,7 +62,7 @@ let () =
 
   (* Simulate multiple requests *)
   Random.self_init ();
-  for i = 1 to 20 do
+  for _ = 1 to 20 do
     let user_id = Random.int 1000 in
     let request_types = ["GET"; "POST"; "PUT"; "DELETE"] in
     let request_type =
@@ -76,7 +76,7 @@ let () =
   Log.close_and_flush ();
 
   print_endline "\nAdvanced logging example completed!";
-  print_endline "Check the 'logs/' directory for output files:" print_endline
-    "  - logs/app.log (all messages)";
+  print_endline "Check the 'logs/' directory for output files:";
+  print_endline "  - logs/app.log (all messages)";
   print_endline "  - logs/errors.log (warnings and errors)"
 ;;

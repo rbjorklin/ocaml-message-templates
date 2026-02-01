@@ -94,9 +94,12 @@ let write t ?exn level message_template properties =
     ()
   else
     (* Create the log event *)
+    let rendered_message =
+      Runtime_helpers.render_template message_template properties
+    in
     let event =
-      Log_event.create ~level ~message_template
-        ~rendered_message:message_template ~properties ?exception_info:exn ()
+      Log_event.create ~level ~message_template ~rendered_message ~properties
+        ?exception_info:exn ()
     in
 
     (* Apply enrichment pipeline *)

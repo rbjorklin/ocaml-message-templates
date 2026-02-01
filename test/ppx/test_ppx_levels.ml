@@ -54,7 +54,7 @@ let test_ppx_information () =
   let content = read_file path in
 
   check bool "Message logged" true
-    (contains "User {user} performed {action}" content);
+    (contains "User alice performed login" content);
   check bool "User value logged" true (contains "alice" content);
   check bool "Action value logged" true (contains "login" content);
 
@@ -74,7 +74,7 @@ let test_ppx_warning () =
   let content = read_file path in
 
   check bool "Warning message logged" true
-    (contains "Warning: {count} items failed validation" content);
+    (contains "Warning: 42 items failed validation" content);
   check bool "Count value logged" true (contains "42" content);
 
   Sys.remove path
@@ -94,7 +94,7 @@ let test_ppx_error () =
   let content = read_file path in
 
   check bool "Error message logged" true
-    (contains "Error {error_code}: {message}" content);
+    (contains "Error 500: Internal Server Error" content);
   check bool "Error code logged" true (contains "500" content);
   check bool "Message logged" true (contains "Internal Server Error" content);
 
@@ -114,7 +114,7 @@ let test_ppx_debug () =
   let content = read_file path in
 
   check bool "Debug message logged" true
-    (contains "Debug: {debug_info}" content);
+    (contains "Debug: connection established" content);
   check bool "Debug info logged" true
     (contains "connection established" content);
 
@@ -141,7 +141,7 @@ let test_ppx_verbose () =
   let content = read_file path in
 
   check bool "Verbose message logged" true
-    (contains "Verbose: {detail}" content);
+    (contains "Verbose: verbose detail here" content);
   check bool "Detail logged" true (contains "verbose detail here" content);
 
   Sys.remove path
@@ -160,7 +160,7 @@ let test_ppx_fatal () =
   let content = read_file path in
 
   check bool "Fatal message logged" true
-    (contains "Fatal error: {reason}" content);
+    (contains "Fatal error: critical failure" content);
   check bool "Reason logged" true (contains "critical failure" content);
 
   Sys.remove path
@@ -181,7 +181,7 @@ let test_ppx_multiple_variables () =
   let content = read_file path in
 
   check bool "Message logged" true
-    (contains "User {user} connected from {ip}:{port}" content);
+    (contains "User bob connected from 192.168.1.1:8080" content);
   check bool "User logged" true (contains "bob" content);
   check bool "IP logged" true (contains "192.168.1.1" content);
   check bool "Port logged" true (contains "8080" content);

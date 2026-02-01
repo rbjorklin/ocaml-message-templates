@@ -54,3 +54,8 @@ tags
 [._]*.un~
 
 # End of https://www.toptal.com/developers/gitignore/api/ocaml,vim
+
+# Project specific
+
+logs/
+ppx_example.log

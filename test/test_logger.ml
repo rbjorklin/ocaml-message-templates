@@ -231,6 +231,44 @@ let test_logger_enricher () =
   Sys.remove path
 ;;
 
+let test_logger_template_rendering () =
+  let path = temp_file () in
+  let sink = create_file_sink_fn path in
+  let logger = Logger.create ~min_level:Level.Information ~sinks:[sink] in
+
+  (* Log with template variables - these should be expanded in rendered
+     output *)
+  Logger.information logger "User {username} logged in from {ip_address}"
+    [("username", `String "alice"); ("ip_address", `String "192.168.1.1")];
+
+  (* Log with multiple variable types *)
+  Logger.information logger "Processing {count} items for user {user_id}"
+    [("count", `Int 42); ("user_id", `Int 123)];
+
+  List.iter (fun s -> s.Composite_sink.flush_fn ()) [sink];
+  List.iter (fun s -> s.Composite_sink.close_fn ()) [sink];
+
+  let content = read_file path in
+
+  (* Verify template variables are expanded in the output *)
+  check bool "Username expanded" true
+    (contains "User alice logged in from 192.168.1.1" content);
+  check bool "IP address expanded" true (contains "192.168.1.1" content);
+  check bool "Count expanded" true
+    (contains "Processing 42 items for user 123" content);
+  check bool "User ID expanded" true (contains "user 123" content);
+
+  (* Verify raw template placeholders are NOT in the output *)
+  check bool "Raw {username} not in output" false
+    (contains "{username}" content);
+  check bool "Raw {ip_address} not in output" false
+    (contains "{ip_address}" content);
+  check bool "Raw {count} not in output" false (contains "{count}" content);
+  check bool "Raw {user_id} not in output" false (contains "{user_id}" content);
+
+  Sys.remove path
+;;
+
 let () =
   run "Logger Tests"
     [ ( "level_filtering"
@@ -251,5 +289,8 @@ let () =
       , [ test_case "Additional filters can be added" `Quick
             test_logger_add_min_level_filter ] )
     ; ( "enrichment"
-      , [test_case "Enrichers modify events" `Quick test_logger_enricher] ) ]
+      , [test_case "Enrichers modify events" `Quick test_logger_enricher] )
+    ; ( "template_rendering"
+      , [ test_case "Template variables are expanded in output" `Quick
+            test_logger_template_rendering ] ) ]
 ;;

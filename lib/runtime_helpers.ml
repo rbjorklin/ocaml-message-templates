@@ -1,5 +1,28 @@
 (** Runtime helpers for message templates *)
 
+(** Extract string value from Yojson.t, converting if necessary *)
+let json_to_string = function
+  | `String s -> s
+  | `Int i -> string_of_int i
+  | `Float f -> string_of_float f
+  | `Bool b -> string_of_bool b
+  | `Null -> "null"
+  | _ -> "<complex>"
+;;
+
+(** Render a template by replacing {var} placeholders with values from properties *)
+let render_template template properties =
+  let result = ref template in
+  List.iter
+    (fun (name, value) ->
+      let placeholder = "{" ^ name ^ "}" in
+      let value_str = json_to_string value in
+      result :=
+        Str.global_replace (Str.regexp_string placeholder) value_str !result )
+    properties;
+  !result
+;;
+
 let rec to_string : 'a. 'a -> string =
  fun v ->
   let repr = Obj.repr v in
