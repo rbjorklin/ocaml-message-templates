@@ -36,3 +36,9 @@
  (libraries
   message-templates
   alcotest))
+
+(test
+ (name test_configuration)
+ (libraries
+  message-templates
+  alcotest))

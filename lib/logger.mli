@@ -24,6 +24,12 @@ module type S = sig
   
   (** Sub-loggers for specific source types *)
   val for_source : t -> string -> t
+  
+  (** Flush all sinks *)
+  val flush : t -> unit
+  
+  (** Close all sinks *)
+  val close : t -> unit
 end
 
 (** Enricher signature - adds properties to log events *)

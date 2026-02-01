@@ -17,42 +17,22 @@ Implementing comprehensive logging infrastructure modeled after Serilog.
 
 ### Phase 1: Core Types and Log Levels ✅ COMPLETE
 
-**Goals:**
-- [x] Define Level.t type with proper ordering
-- [x] Implement log_event type
-- [x] Add level comparison and conversion functions
-- [x] Write tests for level operations
-
 **Deliverables:**
-- [x] `lib/level.ml` - Level type and operations
-- [x] `lib/log_event.ml` - Log event type
+- [x] `lib/level.ml` - Level type and operations (6 levels: Verbose, Debug, Information, Warning, Error, Fatal)
+- [x] `lib/log_event.ml` - Log event type with timestamp, level, message, properties, exception
 - [x] `test/test_level.ml` - Tests (6 tests passing)
 
 ### Phase 2: Sink Architecture ✅ COMPLETE
 
-**Goals:**
-- [x] Define SINK signature
-- [x] Implement Console_sink with colors and templates
-- [x] Implement File_sink with rolling support
-- [x] Implement Composite_sink
-- [x] Implement Null_sink
-- [x] Add tests for sinks
-
 **Deliverables:**
 - [x] `lib/sink.mli` - Sink interface
-- [x] `lib/console_sink.ml` - Console output with colors
-- [x] `lib/file_sink.ml` - File output with rolling (Infinite, Daily, Hourly) and JSON properties
+- [x] `lib/console_sink.ml` - Console output with colors and templates
+- [x] `lib/file_sink.ml` - File output with rolling (Infinite, Daily, Hourly)
 - [x] `lib/composite_sink.ml` - Multiple sinks support
 - [x] `lib/null_sink.ml` - Testing sink
 - [x] `test/test_sinks.ml` - Tests (6 tests passing)
 
 ### Phase 3: Logger Implementation ✅ COMPLETE
-
-**Goals:**
-- [x] Define LOGGER signature
-- [x] Implement Logger module with level checking
-- [x] Add ForContext support for contextual logging
-- [x] Implement enrichment pipeline
 
 **Deliverables:**
 - [x] `lib/logger.mli` - Logger interface with S, ENRICHER, and FILTER signatures
@@ -62,22 +42,31 @@ Implementing comprehensive logging infrastructure modeled after Serilog.
   - Enricher pipeline
   - Multiple filters
   - Level-specific methods (verbose, debug, information, warning, error, fatal)
+  - Flush and close operations
 - [x] `test/test_logger.ml` - Tests (7 tests passing)
 
-### Phase 4: Configuration API 🔄 IN PROGRESS
-
-**Goals:**
-- Implement Configuration module with fluent API
-- Add support for minimum level
-- Support multiple sinks with level overrides
-- Support enrichers and filters
+### Phase 4: Configuration API ✅ COMPLETE
 
 **Deliverables:**
-- `lib/configuration.ml` - Configuration builder
-- `lib/filter.ml` - Filter predicates
-- `test/test_configuration.ml` - Tests
+- [x] `lib/filter.ml` - Filter predicates:
+  - `level_filter` - Filter by minimum level
+  - `property_filter` - Filter by property value
+  - `matching` - Filter by property existence
+  - `all` - Combine filters with AND
+  - `any` - Combine filters with OR
+  - `not_filter` - Negate a filter
+- [x] `lib/configuration.ml` - Configuration builder with fluent API:
+  - `create ()` - Create new configuration
+  - `minimum_level` / `verbose` / `debug` / `information` / `warning` / `error` / `fatal` - Set minimum level
+  - `write_to_file` - Add file sink with optional rolling
+  - `write_to_console` - Add console sink with colors
+  - `write_to_null` - Add null sink
+  - `enrich_with_property` - Add static property enricher
+  - `filter_by_min_level` - Add minimum level filter
+  - `create_logger` - Build logger from configuration
+- [x] `test/test_configuration.ml` - Tests (13 tests passing)
 
-### Phase 5: Global Log Module 📋 PENDING
+### Phase 5: Global Log Module 🔄 IN PROGRESS
 
 **Goals:**
 - Implement Log module for global access
@@ -85,7 +74,7 @@ Implementing comprehensive logging infrastructure modeled after Serilog.
 - Implement thread-safe context storage
 
 **Deliverables:**
-- `lib/log.ml` - Global logger
+- `lib/log.ml` - Global logger module
 - `lib/log_context.ml` - Ambient context
 - `test/test_log_context.ml` - Tests
 
@@ -126,15 +115,15 @@ lib/
 ├── log_event.ml            # ✅ Log event type
 ├── sink.mli                # ✅ Sink interface
 ├── console_sink.ml         # ✅ Console output
-├── file_sink.ml            # ✅ File output with rolling + JSON properties
+├── file_sink.ml            # ✅ File output with rolling
 ├── composite_sink.ml       # ✅ Multiple sinks
 ├── null_sink.ml            # ✅ Testing sink
 ├── logger.mli              # ✅ Logger interface
 ├── logger.ml               # ✅ Logger implementation
-├── configuration.ml        # Configuration builder (in progress)
-├── filter.ml               # Filter predicates (pending)
+├── filter.ml               # ✅ Filter predicates
+├── configuration.ml        # ✅ Configuration builder
+├── log.ml                  # Global logger (in progress)
 ├── log_context.ml          # Ambient context (pending)
-├── log.ml                  # Global logger (pending)
 ├── types.ml                # Template AST types
 ├── template_parser.ml      # Angstrom parser
 ├── runtime_helpers.ml      # Type conversion
@@ -148,6 +137,7 @@ test/
 ├── test_level.ml           # ✅ Level tests (6 passing)
 ├── test_sinks.ml           # ✅ Sink tests (6 passing)
 ├── test_logger.ml          # ✅ Logger tests (7 passing)
+├── test_configuration.ml   # ✅ Configuration tests (13 passing)
 ├── test_parser.ml          # Parser tests (5 passing)
 └── test_ppx_comprehensive.ml   # PPX tests (8 passing)
 ```
@@ -156,10 +146,11 @@ test/
 
 ## Test Status
 
-**Total Tests**: 32 passing ✅
+**Total Tests**: 45 passing ✅
 - Level Tests: 6/6 ✅
 - Sink Tests: 6/6 ✅
 - Logger Tests: 7/7 ✅
+- Configuration Tests: 13/13 ✅
 - Parser Tests: 5/5 ✅
 - PPX Comprehensive Tests: 8/8 ✅
 
@@ -176,48 +167,41 @@ test/
 - `unix` - Time retrieval
 - `str` - String manipulation (for templates and file matching)
 
-**New (for logging infrastructure):**
-- `fmt` (>= 0.9) - For pretty printing and colors (optional)
-
 ---
 
 ## Status
 
-**Phase 1**: ✅ Complete (Level and Log_event modules)
-**Phase 2**: ✅ Complete (All sinks implemented and tested)
-**Phase 3**: ✅ Complete (Logger with level checking, context, enrichers)
-**Phase 4**: 🔄 In Progress (Configuration API)
+**Phase 1**: ✅ Complete (Core types)
+**Phase 2**: ✅ Complete (Sinks)
+**Phase 3**: ✅ Complete (Logger)
+**Phase 4**: ✅ Complete (Configuration API)
+**Phase 5**: 🔄 In Progress (Global Log module)
 **Overall**: Phase 7 of Logging Infrastructure Implementation
-**Tests**: 32/32 passing
+**Tests**: 45/45 passing
 **Date**: 2026-01-31
 
 ---
 
-## Logger API Example
+## Configuration API Example
 
 ```ocaml
 open Message_templates
 
-(* Create a logger *)
+(* Create a logger with file and console output *)
 let logger =
-  let file_sink = File_sink.create "app.log" in
-  let sink = {
-    Composite_sink.emit_fn = (fun e -> File_sink.emit file_sink e);
-    flush_fn = (fun () -> File_sink.flush file_sink);
-    close_fn = (fun () -> File_sink.close file_sink);
-  } in
-  Logger.create ~min_level:Level.Information ~sinks:[sink]
+  Configuration.create ()
+  |> Configuration.debug
+  |> Configuration.write_to_file ~rolling:File_sink.Daily "app.log"
+  |> Configuration.write_to_console ~colors:true ()
+  |> Configuration.enrich_with_property "AppVersion" (`String "1.0.0")
+  |> Configuration.filter_by_min_level Level.Information
+  |> Configuration.create_logger
 
 (* Log messages *)
 Logger.information logger "User {user} logged in" ["user", `String "alice"]
+Logger.error logger "Failed to connect to database" []
 
-(* Add context *)
-let ctx_logger = Logger.for_context logger "RequestId" (`String "abc-123")
-Logger.information ctx_logger "Processing request" []
-
-(* Add enricher *)
-let enriched = Logger.with_enricher logger (fun event ->
-  (* Add timestamp or other properties *)
-  event
-)
+(* Cleanup *)
+Logger.flush logger
+Logger.close logger
 ```

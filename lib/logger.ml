@@ -26,6 +26,8 @@ module type S = sig
   val for_context : t -> string -> Yojson.Safe.t -> t
   val with_enricher : t -> (Log_event.t -> Log_event.t) -> t
   val for_source : t -> string -> t
+  val flush : t -> unit
+  val close : t -> unit
 end
 
 (** Logger implementation type *)
@@ -148,3 +150,11 @@ let add_property t name value =
 let add_min_level_filter t min_level =
   let filter event = Level.compare (Log_event.get_level event) min_level >= 0 in
   { t with filters = filter :: t.filters }
+
+(** Flush all sinks *)
+let flush t =
+  List.iter (fun sink -> sink.Composite_sink.flush_fn ()) t.sinks
+
+(** Close all sinks *)
+let close t =
+  List.iter (fun sink -> sink.Composite_sink.close_fn ()) t.sinks
