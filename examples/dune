@@ -5,3 +5,15 @@
   yojson
   unix)
  (preprocess (pps message-templates-ppx)))
+
+(executables
+ (names
+  logging_basic
+  logging_advanced
+  logging_ppx)
+ (libraries
+  message-templates
+  message-templates-ppx
+  yojson
+  unix)
+ (preprocess (pps message-templates-ppx)))
