@@ -22,7 +22,7 @@ let build_format_string parts =
 ;;
 
 (** Convert a value to its Yojson representation based on type *)
-let yojson_of_value ~loc (expr : expression) (ty : core_type option) =
+let rec yojson_of_value ~loc (expr : expression) (ty : core_type option) =
   match ty with
   | Some {ptyp_desc= Ptyp_constr ({txt= Lident "string"; _}, []); _} ->
       [%expr `String [%e expr]]
@@ -34,8 +34,36 @@ let yojson_of_value ~loc (expr : expression) (ty : core_type option) =
       [%expr `Bool [%e expr]]
   | Some {ptyp_desc= Ptyp_constr ({txt= Lident "int64"; _}, []); _} ->
       [%expr `Intlit (Int64.to_string [%e expr])]
+  | Some {ptyp_desc= Ptyp_constr ({txt= Lident "int32"; _}, []); _} ->
+      [%expr `Intlit (Int32.to_string [%e expr])]
+  | Some {ptyp_desc= Ptyp_constr ({txt= Lident "nativeint"; _}, []); _} ->
+      [%expr `Intlit (Nativeint.to_string [%e expr])]
+  | Some {ptyp_desc= Ptyp_constr ({txt= Lident "char"; _}, []); _} ->
+      [%expr `String (String.make 1 [%e expr])]
+  | Some {ptyp_desc= Ptyp_constr ({txt= Lident "unit"; _}, []); _} ->
+      [%expr `Null]
+  | Some {ptyp_desc= Ptyp_constr ({txt= Lident "list"; _}, [elem_ty]); _} ->
+      (* For lists, we handle the element type recursively *)
+      let x_var = evar ~loc "x" in
+      let elem_converter = yojson_of_value ~loc x_var (Some elem_ty) in
+      [%expr `List (List.map (fun x -> [%e elem_converter]) [%e expr])]
+  | Some {ptyp_desc= Ptyp_constr ({txt= Lident "array"; _}, [elem_ty]); _} ->
+      let x_var = evar ~loc "x" in
+      let elem_converter = yojson_of_value ~loc x_var (Some elem_ty) in
+      [%expr
+        `List
+          (Array.to_list (Array.map (fun x -> [%e elem_converter]) [%e expr]))]
+  | Some {ptyp_desc= Ptyp_constr ({txt= Lident "option"; _}, [elem_ty]); _} ->
+      let x_var = evar ~loc "x" in
+      let elem_converter = yojson_of_value ~loc x_var (Some elem_ty) in
+      [%expr
+        match [%e expr] with
+        | None -> `Null
+        | Some x -> [%e elem_converter]]
   | _ ->
-      (* Fallback: convert to string using runtime helper *)
+      (* Fallback: use runtime helper for backward compatibility. Note: Type
+         info is not available at PPX stage, so this is always used. The runtime
+         helper uses Obj module but provides proper type detection. *)
       [%expr `String (Message_templates.Runtime_helpers.to_string [%e expr])]
 ;;
 
@@ -58,7 +86,9 @@ let apply_operator ~loc op expr ty =
           | `Tuple _ ) as json -> json
         | v -> `String (Yojson.Safe.to_string v)]
   | Stringify ->
-      [%expr `String (Message_templates.Runtime_helpers.to_string [%e expr])]
+      (* For stringify operator, convert to JSON first then to string *)
+      let json_expr = yojson_of_value ~loc expr ty in
+      [%expr `String (Yojson.Safe.to_string [%e json_expr])]
 ;;
 
 (** Generate code for a template *)
