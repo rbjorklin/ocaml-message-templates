@@ -6,12 +6,14 @@ type t =
   ; message_template: string (* Original template *)
   ; rendered_message: string (* Formatted message *)
   ; properties: (string * Yojson.Safe.t) list (* Structured properties *)
-  ; exception_info: exn option (* Optional exception *) }
+  ; exception_info: exn option (* Optional exception *)
+  ; correlation_id: string option (* Optional correlation ID *) }
 
 (** Create a new log event *)
 let create
     ?timestamp
     ?exception_info
+    ?correlation_id
     ~level
     ~message_template
     ~rendered_message
@@ -32,7 +34,8 @@ let create
   ; message_template
   ; rendered_message
   ; properties
-  ; exception_info }
+  ; exception_info
+  ; correlation_id }
 ;;
 
 (** Convert log event to Yojson for output *)
@@ -43,7 +46,12 @@ let to_yojson event =
     ; ("@l", `String (Level.to_string event.level))
     ; ("@m", `String event.rendered_message) ]
   in
-  let props = base_props @ event.properties in
+  let with_correlation =
+    match event.correlation_id with
+    | None -> base_props
+    | Some id -> ("CorrelationId", `String id) :: base_props
+  in
+  let props = with_correlation @ event.properties in
   `Assoc props
 ;;
 
@@ -144,6 +152,14 @@ let to_json_string event =
   Buffer.add_string buf (escape_json_string event.rendered_message);
   Buffer.add_char buf '"';
 
+  (* Correlation ID if present *)
+  ( match event.correlation_id with
+  | None -> ()
+  | Some id ->
+      Buffer.add_string buf ",\"CorrelationId\":\"";
+      Buffer.add_string buf (escape_json_string id);
+      Buffer.add_char buf '"' );
+
   (* Additional properties *)
   List.iter
     (fun prop -> Buffer.add_char buf ','; append_property buf prop)
@@ -170,3 +186,6 @@ let get_properties event = event.properties
 
 (** Get exception info if present *)
 let get_exception event = event.exception_info
+
+(** Get correlation ID if present *)
+let get_correlation_id event = event.correlation_id

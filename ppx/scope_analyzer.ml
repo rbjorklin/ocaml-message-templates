@@ -28,13 +28,89 @@ let rec find_variable scope var_name =
     | outer :: _ -> find_variable outer var_name )
 ;;
 
+(** Calculate edit distance between two strings (Levenshtein distance) *)
+let edit_distance s1 s2 =
+  let len1 = String.length s1 in
+  let len2 = String.length s2 in
+  if len1 = 0 then
+    len2
+  else if len2 = 0 then
+    len1
+  else
+    let matrix = Array.make_matrix (len1 + 1) (len2 + 1) 0 in
+    for i = 0 to len1 do
+      matrix.(i).(0) <- i
+    done;
+    for j = 0 to len2 do
+      matrix.(0).(j) <- j
+    done;
+    for i = 1 to len1 do
+      for j = 1 to len2 do
+        let cost =
+          if s1.[i - 1] = s2.[j - 1] then
+            0
+          else
+            1
+        in
+        matrix.(i).(j) <-
+          min
+            (min (matrix.(i - 1).(j) + 1) (matrix.(i).(j - 1) + 1))
+            (matrix.(i - 1).(j - 1) + cost)
+      done
+    done;
+    matrix.(len1).(len2)
+;;
+
+(** Get all variable names in scope *)
+let rec get_all_variables scope =
+  let current = List.map fst scope.bindings in
+  match scope.outer_scopes with
+  | [] -> current
+  | outer :: _ -> current @ get_all_variables outer
+;;
+
+(** Find similar variable names (suggestions) *)
+let find_suggestions var_name available =
+  let scored =
+    List.map (fun name -> (name, edit_distance var_name name)) available
+  in
+  let sorted = List.sort (fun (_, d1) (_, d2) -> compare d1 d2) scored in
+  List.filter (fun (_, d) -> d <= 3) sorted
+  |> List.map fst
+  |> List.filter (fun n -> n <> var_name)
+;;
+
+(** Format variable list for error message *)
+let format_variables vars =
+  match vars with
+  | [] -> "  (none)"
+  | _ ->
+      vars
+      |> List.sort String.compare
+      |> List.map (fun v -> Printf.sprintf "  - %s" v)
+      |> String.concat "\n"
+;;
+
 (** Validate that a variable exists in scope, raising a compile error if not *)
 let validate_variable ~loc scope var_name =
   match find_variable scope var_name with
   | None ->
+      let available = get_all_variables scope in
+      let suggestions = find_suggestions var_name available in
+      let suggestion_msg =
+        match suggestions with
+        | [] -> ""
+        | [s] -> Printf.sprintf "\n\nDid you mean: '%s'?" s
+        | ss ->
+            "\n\nDid you mean one of these?\n"
+            ^ String.concat "\n"
+                (List.map (fun s -> Printf.sprintf "  - '%s'" s) ss)
+      in
       Location.raise_errorf ~loc
-        "MessageTemplates: Variable '%s' not found in scope. Ensure the variable is defined before using it in a template."
+        "Variable '%s' not found in scope.\n\nAvailable variables:\n%s%s"
         var_name
+        (format_variables available)
+        suggestion_msg
   | ty -> ty
 ;;
 

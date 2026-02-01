@@ -72,14 +72,16 @@ let apply_enrichers t event =
 (** Add context properties to an event *)
 let add_context_properties t event =
   let ambient_props = Log_context.current_properties () in
-  if ambient_props = [] && t.context_properties = [] then
+  let correlation_id = Log_context.get_correlation_id () in
+  if ambient_props = [] && t.context_properties = [] && correlation_id = None
+  then
     event
   else
     let current_props = Log_event.get_properties event in
     (* Merge: ambient context first, then logger context, then event
        properties *)
     let new_props = ambient_props @ t.context_properties @ current_props in
-    (* Re-create event with merged properties *)
+    (* Re-create event with merged properties and correlation ID *)
     Log_event.create
       ~timestamp:(Log_event.get_timestamp event)
       ~level:(Log_event.get_level event)
@@ -87,6 +89,10 @@ let add_context_properties t event =
       ~rendered_message:(Log_event.get_rendered_message event)
       ~properties:new_props
       ?exception_info:(Log_event.get_exception event)
+      ?correlation_id:
+        ( match correlation_id with
+        | None -> Log_event.get_correlation_id event
+        | Some _ -> correlation_id )
       ()
 ;;
 
@@ -100,9 +106,10 @@ let write t ?exn level message_template properties =
     let rendered_message =
       Runtime_helpers.render_template message_template properties
     in
+    let correlation_id = Log_context.get_correlation_id () in
     let event =
       Log_event.create ~level ~message_template ~rendered_message ~properties
-        ?exception_info:exn ()
+        ?exception_info:exn ?correlation_id ()
     in
 
     (* Apply enrichment pipeline *)
