@@ -1,0 +1,19 @@
+# The overall guideline here is to prefer 'fit-or-vertical' or 'sparse'
+# as those generally produce more exact diffs and makes reviewing easier.
+version = 0.28.1
+profile = ocamlformat
+wrap-comments = true
+parse-docstrings = true
+break-cases = fit-or-vertical
+break-infix = fit-or-vertical
+break-fun-decl = fit-or-vertical
+if-then-else = vertical # 'fit-or-vertical' is also alright
+let-binding-spacing = double-semicolon # This helps tremendously with debugging syntax errors
+type-decl = sparse
+let-module = sparse
+let-and = sparse
+module-item-spacing = sparse
+# single-case = sparse # Not actually sure I want this?
+break-string-literals = never # I manage these best myself, thank you very much
+sequence-style = terminator
+sequence-blank-line = preserve-one

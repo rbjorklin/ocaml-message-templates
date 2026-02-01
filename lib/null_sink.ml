@@ -3,17 +3,13 @@
 type t = unit
 
 (** Emit - does nothing *)
-let emit () _event =
-  ()
+let emit () _event = ()
 
 (** Flush - does nothing *)
-let flush () =
-  ()
+let flush () = ()
 
 (** Close - does nothing *)
-let close () =
-  ()
+let close () = ()
 
 (** Create a null sink *)
-let create () =
-  ()
+let create () = ()

@@ -1,11 +1,11 @@
 (** Log levels ordered by severity (lowest to highest) *)
 type t =
-  | Verbose     (* 0 - Most detailed, rarely enabled *)
-  | Debug       (* 1 - Internal system events *)
+  | Verbose (* 0 - Most detailed, rarely enabled *)
+  | Debug (* 1 - Internal system events *)
   | Information (* 2 - Normal operational messages (default) *)
-  | Warning     (* 3 - Suspicious or degraded conditions *)
-  | Error       (* 4 - Functionality unavailable *)
-  | Fatal       (* 5 - System failure, needs immediate attention *)
+  | Warning (* 3 - Suspicious or degraded conditions *)
+  | Error (* 4 - Functionality unavailable *)
+  | Fatal (* 5 - System failure, needs immediate attention *)
 
 (** Convert level to integer for ordering *)
 let to_int = function
@@ -15,6 +15,7 @@ let to_int = function
   | Warning -> 3
   | Error -> 4
   | Fatal -> 5
+;;
 
 (** Convert level from string *)
 let of_string = function
@@ -25,6 +26,7 @@ let of_string = function
   | "Error" | "error" | "ERR" | "err" -> Some Error
   | "Fatal" | "fatal" | "FTL" | "ftl" -> Some Fatal
   | _ -> None
+;;
 
 (** Convert level to full string *)
 let to_string = function
@@ -34,6 +36,7 @@ let to_string = function
   | Warning -> "Warning"
   | Error -> "Error"
   | Fatal -> "Fatal"
+;;
 
 (** Convert level to short 3-character string *)
 let to_short_string = function
@@ -43,15 +46,13 @@ let to_short_string = function
   | Warning -> "WRN"
   | Error -> "ERR"
   | Fatal -> "FTL"
+;;
 
 (** Compare two levels (returns negative if first < second) *)
-let compare a b =
-  Int.compare (to_int a) (to_int b)
+let compare a b = Int.compare (to_int a) (to_int b)
 
 (** Check if level a is greater than or equal to level b *)
-let (>=) a b =
-  compare a b >= 0
+let ( >= ) a b = compare a b >= 0
 
 (** Check if level a is less than level b *)
-let (<) a b =
-  compare a b < 0
+let ( < ) a b = compare a b < 0

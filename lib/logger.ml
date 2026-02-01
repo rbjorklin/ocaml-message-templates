@@ -3,56 +3,71 @@
 (** Enricher signature *)
 module type ENRICHER = sig
   type t
+
   val enrich : t -> Log_event.t -> Log_event.t
 end
 
 (** Filter signature *)
 module type FILTER = sig
   type t
+
   val is_included : t -> Log_event.t -> bool
 end
 
 (** Logger signature *)
 module type S = sig
   type t
-  val write : t -> ?exn:exn -> Level.t -> string -> (string * Yojson.Safe.t) list -> unit
+
+  val write :
+    t -> ?exn:exn -> Level.t -> string -> (string * Yojson.Safe.t) list -> unit
+
   val is_enabled : t -> Level.t -> bool
+
   val verbose : t -> ?exn:exn -> string -> (string * Yojson.Safe.t) list -> unit
+
   val debug : t -> ?exn:exn -> string -> (string * Yojson.Safe.t) list -> unit
-  val information : t -> ?exn:exn -> string -> (string * Yojson.Safe.t) list -> unit
+
+  val information :
+    t -> ?exn:exn -> string -> (string * Yojson.Safe.t) list -> unit
+
   val warning : t -> ?exn:exn -> string -> (string * Yojson.Safe.t) list -> unit
+
   val error : t -> ?exn:exn -> string -> (string * Yojson.Safe.t) list -> unit
+
   val fatal : t -> ?exn:exn -> string -> (string * Yojson.Safe.t) list -> unit
+
   val for_context : t -> string -> Yojson.Safe.t -> t
+
   val with_enricher : t -> (Log_event.t -> Log_event.t) -> t
+
   val for_source : t -> string -> t
+
   val flush : t -> unit
+
   val close : t -> unit
 end
 
 (** Logger implementation type *)
-type logger_impl = {
-  min_level : Level.t;
-  sinks : Composite_sink.sink_fn list;
-  enrichers : (Log_event.t -> Log_event.t) list;
-  filters : (Log_event.t -> bool) list;
-  context_properties : (string * Yojson.Safe.t) list;
-  source : string option;
-}
+type logger_impl =
+  { min_level: Level.t
+  ; sinks: Composite_sink.sink_fn list
+  ; enrichers: (Log_event.t -> Log_event.t) list
+  ; filters: (Log_event.t -> bool) list
+  ; context_properties: (string * Yojson.Safe.t) list
+  ; source: string option }
 
 type t = logger_impl
 
 (** Check if a level is enabled *)
-let is_enabled t level =
-  Level.compare level t.min_level >= 0
+let is_enabled t level = Level.compare level t.min_level >= 0
 
 (** Check if event passes all filters *)
-let passes_filters t event =
-  List.for_all (fun filter -> filter event) t.filters
+let passes_filters t event = List.for_all (fun filter -> filter event) t.filters
 
 (** Apply all enrichers to an event *)
 let apply_enrichers t event =
   List.fold_left (fun ev enricher -> enricher ev) event t.enrichers
+;;
 
 (** Add context properties to an event *)
 let add_context_properties t event =
@@ -70,6 +85,7 @@ let add_context_properties t event =
       ~properties:new_props
       ?exception_info:(Log_event.get_exception event)
       ()
+;;
 
 (** Core write method *)
 let write t ?exn level message_template properties =
@@ -78,83 +94,80 @@ let write t ?exn level message_template properties =
     ()
   else
     (* Create the log event *)
-    let event = Log_event.create
-      ~level
-      ~message_template
-      ~rendered_message:message_template
-      ~properties
-      ?exception_info:exn
-      ()
+    let event =
+      Log_event.create ~level ~message_template
+        ~rendered_message:message_template ~properties ?exception_info:exn ()
     in
-    
+
     (* Apply enrichment pipeline *)
     let event = apply_enrichers t event in
     let event = add_context_properties t event in
-    
+
     (* Check filters *)
     if not (passes_filters t event) then
       ()
     else
       (* Emit to all sinks *)
-      List.iter (fun sink ->
-        sink.Composite_sink.emit_fn event
-      ) t.sinks
+      List.iter (fun sink -> sink.Composite_sink.emit_fn event) t.sinks
+;;
 
 (** Level-specific convenience methods *)
 let verbose t ?exn message properties =
   write t ?exn Level.Verbose message properties
+;;
 
 let debug t ?exn message properties =
   write t ?exn Level.Debug message properties
+;;
 
 let information t ?exn message properties =
   write t ?exn Level.Information message properties
+;;
 
 let warning t ?exn message properties =
   write t ?exn Level.Warning message properties
+;;
 
 let error t ?exn message properties =
   write t ?exn Level.Error message properties
+;;
 
 let fatal t ?exn message properties =
   write t ?exn Level.Fatal message properties
+;;
 
 (** Create a contextual logger with additional property *)
 let for_context t name value =
-  { t with context_properties = (name, value) :: t.context_properties }
+  {t with context_properties= (name, value) :: t.context_properties}
+;;
 
 (** Add an enricher function *)
-let with_enricher t enricher =
-  { t with enrichers = enricher :: t.enrichers }
+let with_enricher t enricher = {t with enrichers= enricher :: t.enrichers}
 
 (** Create a sub-logger for a specific source *)
-let for_source t source_name =
-  { t with source = Some source_name }
+let for_source t source_name = {t with source= Some source_name}
 
 (** Create a logger *)
 let create ~min_level ~sinks =
-  {
-    min_level;
-    sinks;
-    enrichers = [];
-    filters = [];
-    context_properties = [];
-    source = None;
-  }
+  { min_level
+  ; sinks
+  ; enrichers= []
+  ; filters= []
+  ; context_properties= []
+  ; source= None }
+;;
 
 (** Helper to add a property to context *)
-let add_property t name value =
-  for_context t name value
+let add_property t name value = for_context t name value
 
 (** Helper to add a minimum level filter *)
 let add_min_level_filter t min_level =
   let filter event = Level.compare (Log_event.get_level event) min_level >= 0 in
-  { t with filters = filter :: t.filters }
+  {t with filters= filter :: t.filters}
+;;
 
 (** Flush all sinks *)
-let flush t =
-  List.iter (fun sink -> sink.Composite_sink.flush_fn ()) t.sinks
+let flush t = List.iter (fun sink -> sink.Composite_sink.flush_fn ()) t.sinks
 
 (** Close all sinks *)
-let close t =
-  List.iter (fun sink -> sink.Composite_sink.close_fn ()) t.sinks
+let close t = List.iter (fun sink -> sink.Composite_sink.close_fn ()) t.sinks

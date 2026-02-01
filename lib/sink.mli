@@ -3,13 +3,13 @@
 (** Sink signature *)
 module type S = sig
   type t
-  
-  (** Emit a log event to the sink *)
+
   val emit : t -> Log_event.t -> unit
-  
-  (** Flush any buffered output *)
+  (** Emit a log event to the sink *)
+
   val flush : t -> unit
-  
-  (** Close the sink and release resources *)
+  (** Flush any buffered output *)
+
   val close : t -> unit
+  (** Close the sink and release resources *)
 end

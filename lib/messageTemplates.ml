@@ -16,5 +16,6 @@ module Configuration = Configuration
 module Log = Log
 module Log_context = Log_context
 
-(** The PPX rewriter will generate code that returns a tuple of (string, Yojson.Safe.t)
-    representing the formatted message and structured JSON output. *)
+(** The PPX rewriter will generate code that returns a tuple of (string,
+    Yojson.Safe.t) representing the formatted message and structured JSON
+    output. *)

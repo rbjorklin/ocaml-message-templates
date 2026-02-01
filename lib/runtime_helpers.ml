@@ -1,6 +1,7 @@
 (** Runtime helpers for message templates *)
 
-let rec to_string : 'a. 'a -> string = fun v ->
+let rec to_string : 'a. 'a -> string =
+ fun v ->
   let repr = Obj.repr v in
   if Obj.is_int repr then
     string_of_int (Obj.obj repr)
@@ -24,3 +25,4 @@ let rec to_string : 'a. 'a -> string = fun v ->
         "[" ^ String.concat "; " (Array.to_list elems) ^ "]"
   else
     "<unknown>"
+;;
