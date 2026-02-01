@@ -134,35 +134,46 @@ let rec build_string_render ~loc parts scope =
         estring ~loc s
     (* Simple case: single hole with no format, use concatenation *)
   else if hole_count = 1 && not has_formats then
-    match
-      parts
-    with
+    (* Helper to get the hole expression, applying stringify operator if
+       needed *)
+    let get_hole_expr h =
+      match h.operator with
+      | Stringify ->
+          [%expr
+            Message_templates.Runtime_helpers.any_to_string
+              [%e evar ~loc h.name]]
+      | _ -> evar ~loc h.name
+    in
+    match parts with
     | [Text t1; Hole h; Text t2] when t2 = "" ->
         (* "prefix{var}" -> "prefix" ^ var *)
-        [%expr [%e estring ~loc t1] ^ [%e evar ~loc h.name]]
+        [%expr [%e estring ~loc t1] ^ [%e get_hole_expr h]]
     | [Hole h; Text t2] when t2 = "" ->
         (* "{var}" -> var *)
-        evar ~loc h.name
+        get_hole_expr h
     | [Hole h] ->
         (* "{var}" -> var *)
-        evar ~loc h.name
+        get_hole_expr h
     | [Text t1; Hole h] ->
         (* "prefix{var}" -> "prefix" ^ var *)
-        [%expr [%e estring ~loc t1] ^ [%e evar ~loc h.name]]
+        [%expr [%e estring ~loc t1] ^ [%e get_hole_expr h]]
     | [Hole h; Text t2] ->
         (* "{var}suffix" -> var ^ "suffix" *)
-        [%expr [%e evar ~loc h.name] ^ [%e estring ~loc t2]]
+        [%expr [%e get_hole_expr h] ^ [%e estring ~loc t2]]
     | [Text t1; Hole h; Text t2] ->
         (* "prefix{var}suffix" -> "prefix" ^ var ^ "suffix" *)
         [%expr
-          [%e estring ~loc t1] ^ [%e evar ~loc h.name] ^ [%e estring ~loc t2]]
+          [%e estring ~loc t1] ^ [%e get_hole_expr h] ^ [%e estring ~loc t2]]
     | _ ->
         (* Fall through to Buffer for complex cases *)
         build_buffer_render ~loc parts scope
+    (* If format specifiers are present, use Printf.sprintf *)
+  else if has_formats then
+    build_printf_render ~loc parts scope
     (* Complex case: use Buffer for efficiency *)
   else if hole_count > 2 || List.length parts > 4 then
     build_buffer_render ~loc parts scope
-  (* Default: use Printf.sprintf for format specifiers *)
+    (* Default: simple concatenation *)
   else
     build_printf_render ~loc parts scope
 
