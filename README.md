@@ -1,9 +1,10 @@
 # OCaml Message Templates
 
-A PPX-based library for Message Templates in OCaml that provides compile-time template validation with automatic variable capture from scope.
+A PPX-based library for Message Templates in OCaml that provides compile-time template validation with automatic variable capture from scope, plus a comprehensive logging infrastructure modeled after Serilog.
 
 ## Features
 
+### Core Template Features
 - **Compile-time Validation**: Template syntax and variable existence checked at compile time
 - **Type Safety**: Hard compile errors for undefined variables
 - **Dual Output**: Generate both formatted strings and structured JSON output
@@ -12,6 +13,17 @@ A PPX-based library for Message Templates in OCaml that provides compile-time te
 - **Operator Support**: Special operators for structure preservation (`@`) and stringification (`$`)
 - **Format Specifiers**: Support for format strings like `{count:05d}`, `{value:.2f}`, `{flag:B}`
 - **High Performance**: Comparable to hand-written Printf code
+
+### Logging Infrastructure
+- **Log Levels**: Six levels (Verbose, Debug, Information, Warning, Error, Fatal) with proper ordering
+- **Multiple Sinks**: Console (with colors), File (with rolling), Composite, and Null sinks
+- **Structured Logging**: Automatic JSON output with timestamps and properties
+- **Context Tracking**: Ambient properties that flow across function calls
+- **Enrichment**: Add contextual properties automatically to all log events
+- **Filtering**: Level-based and property-based filtering with logical combinators
+- **Global Logger**: Static logger access similar to Serilog.Log
+- **PPX Extensions**: Clean syntax with `[%log.level "message {var}"]`
+- **Fluent Configuration**: Easy-to-use configuration builder API
 
 ## Installation
 
@@ -23,9 +35,12 @@ Or add to your `dune-project`:
 
 ```dune
 (depends
+  (ocaml (>= 5.4.0))
   message-templates
   message-templates-ppx
-  ptime)
+  yojson
+  ptime
+  unix)
 ```
 
 ## Usage
@@ -39,24 +54,117 @@ Add the PPX to your dune file:
  (preprocess (pps message-templates-ppx)))
 ```
 
-Note: The `unix` library is required for timestamp generation.
-
-### Basic Example
+### Template Basics
 
 ```ocaml
 let () =
   let username = "alice" in
   let ip_address = "192.168.1.1" in
-  
+
   (* Template with automatic variable capture *)
   let msg, json = [%template "User {username} logged in from {ip_address}"] in
-  
+
   Printf.printf "%s\n" msg;
   (* Output: User alice logged in from 192.168.1.1 *)
-  
+
   Yojson.Safe.to_string json |> print_endline;
   (* Output: {"@t":"2026-01-31T23:54:42-00:00","@m":"User {username} logged in from {ip_address}",
               "username":"alice","ip_address":"192.168.1.1"} *)
+```
+
+### Logging Basics
+
+Configure the global logger:
+
+```ocaml
+open Message_templates
+
+let () =
+  (* Setup logger at application startup *)
+  Configuration.create ()
+  |> Configuration.minimum_level Level.Information
+  |> Configuration.write_to_console ~colors:true ()
+  |> Configuration.write_to_file ~rolling:File_sink.Daily "app.log"
+  |> Configuration.create_logger
+  |> Log.set_logger
+```
+
+Log messages with variables:
+
+```ocaml
+let process_user user_id =
+  Log.information "Processing user {user_id}" ["user_id", `Int user_id];
+
+  try
+    (* ... work ... *)
+    Log.debug "User {user_id} processed successfully" ["user_id", `Int user_id]
+  with exn ->
+    Log.error ~exn "Failed to process user {user_id}" ["user_id", `Int user_id]
+```
+
+### PPX Logging (Clean Syntax)
+
+Use PPX extensions for even cleaner syntax:
+
+```ocaml
+let user = "alice" in
+let action = "login" in
+
+(* All six log levels supported *)
+[%log.verbose "Detailed trace: user={user}, action={action}"];
+[%log.debug "Debug info: user={user}"];
+[%log.information "User {user} performed {action}"];
+[%log.warning "Warning for user {user}"];
+[%log.error "Error for user {user}"];
+[%log.fatal "Fatal error for user {user}"];
+```
+
+### Contextual Logging
+
+Track request context across function calls:
+
+```ocaml
+let handle_request request_id user_id =
+  Log_context.with_property "RequestId" (`String request_id) (fun () ->
+    Log_context.with_property "UserId" (`Int user_id) (fun () ->
+      Log.information "Request started" [];
+
+      (* All logs within this scope include RequestId and UserId *)
+      validate_request ();
+      process_data ();
+
+      Log.information "Request completed" []
+    )
+  )
+```
+
+### Configuration Options
+
+```ocaml
+let logger =
+  Configuration.create ()
+  |> Configuration.debug  (* Set minimum level *)
+
+  (* Console with colors *)
+  |> Configuration.write_to_console
+       ~colors:true
+       ~stderr_threshold:Level.Warning
+       ()
+
+  (* File with daily rolling *)
+  |> Configuration.write_to_file
+       ~rolling:File_sink.Daily
+       ~output_template:"{timestamp} [{level}] {message}"
+       "logs/app.log"
+
+  (* Static properties *)
+  |> Configuration.enrich_with_property "AppVersion" (`String "1.0.0")
+  |> Configuration.enrich_with_property "Environment" (`String "Production")
+
+  (* Filters *)
+  |> Configuration.filter_by_min_level Level.Information
+
+  |> Configuration.create_logger
 ```
 
 ### Operators
@@ -92,7 +200,7 @@ Use doubled braces for literal braces:
 
 ```ocaml
 let msg, _ = [%template "Use {{braces}} for literals"] in
-(* Output: Use {braces}} for literals *)
+(* Output: Use {braces} for literals *)
 ```
 
 ## Architecture
@@ -104,6 +212,27 @@ The library uses a PPX rewriter that operates at compile time:
 3. **Generate**: OCaml code generated for both string and JSON output
 4. **Zero Overhead**: No runtime parsing - all work done at compile time
 
+### Logging Pipeline
+
+```
+Application Code
+       |
+       v
+Level Check (fast path)
+       |
+       v
+Template Expansion (via PPX)
+       |
+       v
+Context Enrichment (add ambient properties)
+       |
+       v
+Filtering (level/property-based)
+       |
+       v
+Sinks (Console, File, etc.)
+```
+
 ## JSON Output Structure
 
 All log events include a timestamp in RFC3339 format:
@@ -113,15 +242,16 @@ All log events include a timestamp in RFC3339 format:
   "@t": "2026-01-31T23:54:42-00:00",
   "@m": "User {username} logged in from {ip_address}",
   "username": "alice",
-  "ip_address": "192.168.1.1"
+  "ip_address": "192.168.1.1",
+  "RequestId": "req-123-abc"
 }
 ```
 
 - `@t`: Timestamp in RFC3339 format (ISO 8601 with timezone) - follows CLEF convention
 - `@m`: Message template (the original template string) - follows CLEF convention
-- Additional fields: Captured variables from the template
+- Additional fields: Captured variables and context properties
 
-The field names `@t` and `@m` follow the [CLEF (Compact Log Event Format)](https://github.com/serilog/serilog-formatting-compact) convention used by Serilog and Seq. This is not part of the Message Templates specification, which leaves output format field names implementation-dependent.
+The field names `@t` and `@m` follow the [CLEF (Compact Log Event Format)](https://github.com/serilog/serilog-formatting-compact) convention used by Serilog and Seq.
 
 ## Performance
 
@@ -148,60 +278,61 @@ Run the test suite:
 dune runtest
 ```
 
-This runs:
-- Parser unit tests (5 tests)
-- PPX comprehensive tests (8 tests including timestamp validation)
+This runs 59 tests:
+- Level tests (6)
+- Sink tests (6)
+- Logger tests (7)
+- Configuration tests (13)
+- Global log tests (11)
+- PPX comprehensive tests (8)
+- PPX log level tests (8)
+
+All tests passing ✅
 
 ## Examples
 
 See the `examples/` directory:
-- `basic.ml` - Simple usage examples with timestamps
-- `comprehensive_dir/main.ml` - Advanced features demonstration
+
+### Template Examples
+- `basic.ml` - Simple template usage
+- `comprehensive.ml` - Advanced template features
+
+### Logging Examples
+- `logging_basic.ml` - Basic logging setup and usage
+- `logging_advanced.ml` - Multiple sinks, rolling files, enrichment
+- `logging_ppx.ml` - PPX extension usage
 
 Run examples:
 
 ```bash
 dune exec examples/basic.exe
-dune exec examples/comprehensive_dir/main.exe
+dune exec examples/logging_basic.exe
+dune exec examples/logging_advanced.exe
+dune exec examples/logging_ppx.exe
 ```
 
-## Implementation Details
+## API Reference
 
-### Core Components
+### Core Modules
 
-1. **Template Parser** (`lib/template_parser.ml`)
-   - Angstrom-based parser for Message Templates syntax
-   - Supports holes, operators, format specifiers, escaped braces
+- `Level` - Log levels (Verbose, Debug, Information, Warning, Error, Fatal)
+- `Log_event` - Log event type with timestamp, level, message, properties
+- `Template_parser` - Template string parsing
 
-2. **PPX Rewriter** (`ppx/ppx_message_templates.ml`)
-   - Compile-time template processing
-   - Generates Printf-based string rendering
-   - Generates Yojson-based structured output with timestamps
+### Sink Modules
 
-3. **Code Generator** (`ppx/code_generator.ml`)
-   - Builds format strings for Printf
-   - Applies type-specific JSON converters
-   - Generates timestamp using Ptime
+- `Console_sink` - Console output with colors
+- `File_sink` - File output with rolling (Infinite, Daily, Hourly)
+- `Composite_sink` - Route to multiple sinks
+- `Null_sink` - Discard all events (testing)
 
-4. **Runtime Helpers** (`lib/runtime_helpers.ml`)
-   - Type-generic string conversion using Obj module
-   - Handles primitives, lists, tuples, and custom types
+### Logger Modules
 
-### Timestamp Generation
-
-Timestamps are generated at runtime using:
-- `Unix.gettimeofday()` for current time
-- `Ptime.of_float_s` to convert to Ptime.t
-- `Ptime.to_rfc3339` for RFC3339 formatting
-
-This ensures accurate timestamps in the generated JSON output.
-
-### Supported Types
-
-The PPX works with any OCaml type:
-- Primitives: `string`, `int`, `float`, `bool`
-- Collections: `list`, `array`
-- Custom types: automatically converted via runtime helper
+- `Logger` - Main logger interface with level checking and enrichment
+- `Filter` - Filter predicates (level, property, all/any/not)
+- `Configuration` - Fluent configuration builder
+- `Log` - Global logger module
+- `Log_context` - Ambient context for properties
 
 ## Compliance with Message Templates Specification
 
@@ -222,4 +353,4 @@ MIT
 
 ## Acknowledgments
 
-This implementation follows the Message Templates specification from https://messagetemplates.org/
+This implementation follows the Message Templates specification from https://messagetemplates.org/ and is inspired by Serilog's design patterns.
