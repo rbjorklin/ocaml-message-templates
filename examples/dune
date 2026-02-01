@@ -4,6 +4,7 @@
   message-templates
   yojson
   unix)
+ (modules basic)
  (preprocess (pps message-templates-ppx)))
 
 (executables
@@ -11,6 +12,7 @@
   logging_basic
   logging_advanced
   logging_ppx)
+ (modules logging_basic logging_advanced logging_ppx)
  (libraries
   message-templates
   message-templates-ppx
