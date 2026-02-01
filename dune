@@ -1,2 +1,2 @@
 (library
- (name msg_tmpl))
+ (name message_templates))

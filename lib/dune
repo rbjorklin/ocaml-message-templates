@@ -1,0 +1,5 @@
+(library
+ (public_name message-templates)
+ (name message_templates)
+ (libraries yojson eio angstrom ptime unix str)
+ (modules_without_implementation sink))

@@ -1,0 +1,9 @@
+(library
+ (public_name message-templates-ppx)
+ (name ppx_message_templates)
+ (kind ppx_rewriter)
+ (libraries
+  ppxlib
+  angstrom
+  message-templates)
+ (preprocess (pps ppxlib.metaquot)))

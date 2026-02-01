@@ -1,0 +1,7 @@
+(executable
+ (name main)
+ (libraries
+  message-templates
+  yojson
+  unix)
+ (preprocess (pps message-templates-ppx)))

@@ -1,0 +1,32 @@
+(test
+ (name test_parser)
+ (libraries
+  message-templates
+  alcotest))
+
+(test
+ (name test_ppx_comprehensive)
+ (libraries
+  message-templates
+  message-templates-ppx
+  yojson
+  unix
+  alcotest)
+ (preprocess (pps message-templates-ppx)))
+
+(test
+ (name test_escape)
+ (libraries
+  message-templates))
+
+(test
+ (name test_level)
+ (libraries
+  message-templates
+  alcotest))
+
+(test
+ (name test_sinks)
+ (libraries
+  message-templates
+  alcotest))
