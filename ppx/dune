@@ -6,4 +6,9 @@
   ppxlib
   angstrom
   message-templates)
+ (modules
+  ppx_message_templates
+  ppx_log_levels
+  scope_analyzer
+  code_generator)
  (preprocess (pps ppxlib.metaquot)))
