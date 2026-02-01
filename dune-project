@@ -41,3 +41,31 @@
   (ppxlib (>= 0.35.0))
   (angstrom (>= 0.15.0))
   (message-templates (= :version))))
+
+(package
+ (name message-templates-lwt)
+ (synopsis "Lwt async support for Message Templates")
+ (description "Async logging support using Lwt for the message-templates library")
+ (depends
+  (ocaml (>= 5.4.0))
+  (dune (>= 3.0))
+  (message-templates (= :version))
+  (lwt (>= 5.6))
+  (lwt-unix (>= 5.6))
+  (yojson (>= 2.0.0))
+  (ptime (>= 1.0))
+  (alcotest :with-test)))
+
+(package
+ (name message-templates-eio)
+ (synopsis "Eio async support for Message Templates")
+ (description "Async logging support using Eio for the message-templates library")
+ (depends
+  (ocaml (>= 5.4.0))
+  (dune (>= 3.0))
+  (message-templates (= :version))
+  (eio (>= 1.0))
+  (eio_main (>= 1.0))
+  (yojson (>= 2.0.0))
+  (ptime (>= 1.0))
+  (alcotest :with-test)))

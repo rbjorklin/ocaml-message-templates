@@ -1,0 +1,5 @@
+(library
+ (public_name message-templates-eio)
+ (name message_templates_eio)
+ (libraries message-templates eio yojson ptime unix str)
+ (modules eio_sink eio_file_sink eio_console_sink eio_logger eio_configuration message_templates_eio))
