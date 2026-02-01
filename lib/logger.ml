@@ -71,11 +71,14 @@ let apply_enrichers t event =
 
 (** Add context properties to an event *)
 let add_context_properties t event =
-  if t.context_properties = [] then
+  let ambient_props = Log_context.current_properties () in
+  if ambient_props = [] && t.context_properties = [] then
     event
   else
     let current_props = Log_event.get_properties event in
-    let new_props = t.context_properties @ current_props in
+    (* Merge: ambient context first, then logger context, then event
+       properties *)
+    let new_props = ambient_props @ t.context_properties @ current_props in
     (* Re-create event with merged properties *)
     Log_event.create
       ~timestamp:(Log_event.get_timestamp event)
