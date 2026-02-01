@@ -17,7 +17,8 @@
 (test
  (name test_escape)
  (libraries
-  message-templates))
+  message-templates
+  alcotest))
 
 (test
  (name test_level)
@@ -47,4 +48,11 @@
  (name test_global_log)
  (libraries
   message-templates
+  alcotest))
+
+(test
+ (name test_json_sink)
+ (libraries
+  message-templates
+  yojson
   alcotest))
