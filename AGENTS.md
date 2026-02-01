@@ -237,7 +237,7 @@ All log events follow CLEF (Compact Log Event Format):
 
 ## Notes
 
-- **Always run tests after changes**: `dune runtest`
+- **Always run tests after changes**: `dune runtest`, no output means all tests were successful
 - **Always format file after editing**: `ocamlformat --inplace <filename>`
 - **Template variables must be in scope**: PPX validates at compile time
 - **Two output formats**: String for display, JSON for structured logging
