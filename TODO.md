@@ -66,19 +66,27 @@ Implementing comprehensive logging infrastructure modeled after Serilog.
   - `create_logger` - Build logger from configuration
 - [x] `test/test_configuration.ml` - Tests (13 tests passing)
 
-### Phase 5: Global Log Module 🔄 IN PROGRESS
-
-**Goals:**
-- Implement Log module for global access
-- Add LogContext for ambient properties
-- Implement thread-safe context storage
+### Phase 5: Global Log Module ✅ COMPLETE
 
 **Deliverables:**
-- `lib/log.ml` - Global logger module
-- `lib/log_context.ml` - Ambient context
-- `test/test_log_context.ml` - Tests
+- [x] `lib/log_context.ml` - Ambient context for properties:
+  - `push_property` / `pop_property` - Stack-based property management
+  - `current_properties` - Get all current properties
+  - `clear` - Clear all properties
+  - `with_property` - Execute with temporary property (auto-pops)
+  - `with_properties` - Execute with multiple temporary properties
+  - `with_scope` - Create isolated scope
+- [x] `lib/log.ml` - Global logger module:
+  - `set_logger` / `get_logger` - Configure global logger
+  - `close_and_flush` - Cleanup and close
+  - `is_enabled` - Check if level is enabled
+  - `write` - Write with explicit level
+  - Level methods: `verbose`, `debug`, `information`, `warning`, `error`, `fatal`
+  - `for_context` / `for_source` - Create contextual loggers
+  - `flush` / `close` - Cleanup operations
+- [x] `test/test_global_log.ml` - Tests (11 tests passing)
 
-### Phase 6: PPX Extensions 📋 PENDING
+### Phase 6: PPX Extensions 🔄 IN PROGRESS
 
 **Goals:**
 - Extend PPX with level-aware extensions
@@ -122,8 +130,8 @@ lib/
 ├── logger.ml               # ✅ Logger implementation
 ├── filter.ml               # ✅ Filter predicates
 ├── configuration.ml        # ✅ Configuration builder
-├── log.ml                  # Global logger (in progress)
-├── log_context.ml          # Ambient context (pending)
+├── log.ml                  # ✅ Global logger
+├── log_context.ml          # ✅ Ambient context
 ├── types.ml                # Template AST types
 ├── template_parser.ml      # Angstrom parser
 ├── runtime_helpers.ml      # Type conversion
@@ -138,6 +146,7 @@ test/
 ├── test_sinks.ml           # ✅ Sink tests (6 passing)
 ├── test_logger.ml          # ✅ Logger tests (7 passing)
 ├── test_configuration.ml   # ✅ Configuration tests (13 passing)
+├── test_global_log.ml      # ✅ Global log tests (11 passing)
 ├── test_parser.ml          # Parser tests (5 passing)
 └── test_ppx_comprehensive.ml   # PPX tests (8 passing)
 ```
@@ -146,11 +155,12 @@ test/
 
 ## Test Status
 
-**Total Tests**: 45 passing ✅
+**Total Tests**: 56 passing ✅
 - Level Tests: 6/6 ✅
 - Sink Tests: 6/6 ✅
 - Logger Tests: 7/7 ✅
 - Configuration Tests: 13/13 ✅
+- Global Log Tests: 11/11 ✅
 - Parser Tests: 5/5 ✅
 - PPX Comprehensive Tests: 8/8 ✅
 
@@ -175,33 +185,43 @@ test/
 **Phase 2**: ✅ Complete (Sinks)
 **Phase 3**: ✅ Complete (Logger)
 **Phase 4**: ✅ Complete (Configuration API)
-**Phase 5**: 🔄 In Progress (Global Log module)
+**Phase 5**: ✅ Complete (Global Log module)
+**Phase 6**: 🔄 In Progress (PPX Extensions)
 **Overall**: Phase 7 of Logging Infrastructure Implementation
-**Tests**: 45/45 passing
+**Tests**: 56/56 passing
 **Date**: 2026-01-31
 
 ---
 
-## Configuration API Example
+## Global Log API Example
 
 ```ocaml
 open Message_templates
 
-(* Create a logger with file and console output *)
-let logger =
-  Configuration.create ()
-  |> Configuration.debug
-  |> Configuration.write_to_file ~rolling:File_sink.Daily "app.log"
-  |> Configuration.write_to_console ~colors:true ()
-  |> Configuration.enrich_with_property "AppVersion" (`String "1.0.0")
-  |> Configuration.filter_by_min_level Level.Information
-  |> Configuration.create_logger
+(* Configure once at startup *)
+let () =
+  let logger =
+    Configuration.create ()
+    |> Configuration.debug
+    |> Configuration.write_to_file ~rolling:File_sink.Daily "app.log"
+    |> Configuration.write_to_console ~colors:true ()
+    |> Configuration.enrich_with_property "Version" (`String "1.0.0")
+    |> Configuration.create_logger
+  in
+  Log.set_logger logger
 
-(* Log messages *)
-Logger.information logger "User {user} logged in" ["user", `String "alice"]
-Logger.error logger "Failed to connect to database" []
+(* Use throughout application *)
+let process_user user_id =
+  Log_context.with_property "UserId" (`Int user_id) (fun () ->
+    Log.information "Processing user" [];
+    try
+      (* ... work ... *)
+      Log.debug "User processed successfully" []
+    with e ->
+      Log.error ~exn:e "Failed to process user" []
+  )
 
-(* Cleanup *)
-Logger.flush logger
-Logger.close logger
+(* Cleanup at shutdown *)
+let () =
+  Log.close_and_flush ()
 ```

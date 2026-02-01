@@ -42,3 +42,9 @@
  (libraries
   message-templates
   alcotest))
+
+(test
+ (name test_global_log)
+ (libraries
+  message-templates
+  alcotest))
