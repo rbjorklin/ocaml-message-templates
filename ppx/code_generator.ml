@@ -92,14 +92,121 @@ let apply_operator ~loc op expr ty =
       [%expr `String (Yojson.Safe.to_string [%e json_expr])]
 ;;
 
-(** Generate code for a template *)
-let generate_template_code ~loc scope parts =
-  (* Build format string for Printf *)
-  let fmt_string = build_format_string parts in
+(** Check if template has format specifiers *)
+let has_format_specifiers parts =
+  List.exists
+    (function
+      | Hole h -> h.format <> None
+      | _ -> false )
+    parts
+;;
 
-  (* Collect variable expressions for string rendering. For Stringify operator
-     ($var), we convert to string. For others, variables are used directly with
-     format specifiers. *)
+(** Count holes in template *)
+let count_holes parts =
+  List.fold_left
+    (fun count part ->
+      match part with
+      | Hole _ -> count + 1
+      | _ -> count )
+    0 parts
+;;
+
+(** Build string render expression optimized for template complexity *)
+let rec build_string_render ~loc parts scope =
+  let hole_count = count_holes parts in
+  let has_formats = has_format_specifiers parts in
+
+  (* Simple case: just text, no variables *)
+  if hole_count = 0 then
+    match
+      parts
+    with
+    | [Text s] -> estring ~loc s
+    | _ ->
+        let s =
+          String.concat ""
+            (List.map
+               (function
+                 | Text t -> t
+                 | Hole _ -> "" )
+               parts )
+        in
+        estring ~loc s
+    (* Simple case: single hole with no format, use concatenation *)
+  else if hole_count = 1 && not has_formats then
+    match
+      parts
+    with
+    | [Text t1; Hole h; Text t2] when t2 = "" ->
+        (* "prefix{var}" -> "prefix" ^ var *)
+        [%expr [%e estring ~loc t1] ^ [%e evar ~loc h.name]]
+    | [Hole h; Text t2] when t2 = "" ->
+        (* "{var}" -> var *)
+        evar ~loc h.name
+    | [Hole h] ->
+        (* "{var}" -> var *)
+        evar ~loc h.name
+    | [Text t1; Hole h] ->
+        (* "prefix{var}" -> "prefix" ^ var *)
+        [%expr [%e estring ~loc t1] ^ [%e evar ~loc h.name]]
+    | [Hole h; Text t2] ->
+        (* "{var}suffix" -> var ^ "suffix" *)
+        [%expr [%e evar ~loc h.name] ^ [%e estring ~loc t2]]
+    | [Text t1; Hole h; Text t2] ->
+        (* "prefix{var}suffix" -> "prefix" ^ var ^ "suffix" *)
+        [%expr
+          [%e estring ~loc t1] ^ [%e evar ~loc h.name] ^ [%e estring ~loc t2]]
+    | _ ->
+        (* Fall through to Buffer for complex cases *)
+        build_buffer_render ~loc parts scope
+    (* Complex case: use Buffer for efficiency *)
+  else if hole_count > 2 || List.length parts > 4 then
+    build_buffer_render ~loc parts scope
+  (* Default: use Printf.sprintf for format specifiers *)
+  else
+    build_printf_render ~loc parts scope
+
+(** Build string render using Buffer for complex templates *)
+and build_buffer_render ~loc parts _scope =
+  let buf_var = evar ~loc "__buf" in
+
+  let add_calls =
+    List.map
+      (function
+        | Text s -> [%expr Buffer.add_string [%e buf_var] [%e estring ~loc s]]
+        | Hole h ->
+            let var = evar ~loc h.name in
+            let expr =
+              match h.operator with
+              | Stringify ->
+                  [%expr
+                    Buffer.add_string [%e buf_var]
+                      (Message_templates.Runtime_helpers.any_to_string [%e var])]
+              | _ ->
+                  [%expr
+                    Buffer.add_string [%e buf_var]
+                      (Message_templates.Runtime_helpers.any_to_string [%e var])]
+            in
+            expr )
+      parts
+  in
+
+  (* Build the final expression with all buffer operations sequenced *)
+  let body =
+    List.fold_right
+      (fun call acc ->
+        [%expr
+          let () = [%e call] in
+          [%e acc]] )
+      add_calls [%expr Buffer.contents __buf]
+  in
+  [%expr
+    let __buf = Buffer.create 256 in
+    [%e body]]
+
+(** Build string render using Printf.sprintf *)
+and build_printf_render ~loc parts _scope =
+  let fmt_string = build_format_string parts in
   let var_exprs =
     List.filter_map
       (function
@@ -109,23 +216,20 @@ let generate_template_code ~loc scope parts =
             let expr =
               match h.operator with
               | Stringify ->
-                  (* Convert to string using runtime helper *)
                   [%expr
                     Message_templates.Runtime_helpers.any_to_string [%e var]]
-              | _ ->
-                  (* Use directly - format specifiers handle type conversion *)
-                  var
+              | _ -> var
             in
             Some expr )
       parts
   in
+  eapply ~loc (evar ~loc "Printf.sprintf") (estring ~loc fmt_string :: var_exprs)
+;;
 
-  (* Build string render expression *)
-  let string_render =
-    eapply ~loc
-      (evar ~loc "Printf.sprintf")
-      (estring ~loc fmt_string :: var_exprs)
-  in
+(** Generate code for a template *)
+let generate_template_code ~loc scope parts =
+  (* Build optimized string render expression *)
+  let string_render = build_string_render ~loc parts scope in
 
   (* Build JSON properties *)
   let properties =

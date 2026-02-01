@@ -4,8 +4,8 @@ type t = {oc: out_channel}
 
 (** Emit a log event as JSON *)
 let emit t event =
-  let json = Log_event.to_yojson event in
-  output_string t.oc (Yojson.Safe.to_string json);
+  let json_str = Log_event.to_json_string event in
+  output_string t.oc json_str;
   output_char t.oc '\n'
 ;;
 
