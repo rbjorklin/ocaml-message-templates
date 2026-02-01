@@ -37,12 +37,10 @@ let expand_log_level level_name ~ctxt template_str =
         let name = hole.name in
         let var_expr = Ast_builder.Default.evar ~loc name in
 
-        (* Create a tuple (name, value) *)
+        (* Create a tuple (name, value) - preserve types using to_json *)
         Ast_builder.Default.pexp_tuple ~loc
           [ Ast_builder.Default.estring ~loc name
-          ; [%expr
-              `String
-                (Message_templates.Runtime_helpers.to_string [%e var_expr])] ] )
+          ; [%expr Message_templates.Runtime_helpers.to_json [%e var_expr]] ] )
       holes
   in
 

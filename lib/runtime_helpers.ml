@@ -49,3 +49,28 @@ let rec to_string : 'a. 'a -> string =
   else
     "<unknown>"
 ;;
+
+(** Convert a value to appropriate Yojson.Safe.t based on runtime type *)
+let to_json : 'a. 'a -> Yojson.Safe.t =
+ fun v ->
+  let repr = Obj.repr v in
+  if Obj.is_int repr then
+    (* In OCaml, bool is represented as int: false = 0, true = 1 *)
+    let int_val = Obj.obj repr in
+    if int_val = 0 then
+      `Bool false
+    else if int_val = 1 then
+      `Bool true
+    else
+      `Int int_val
+  else if Obj.is_block repr then
+    let tag = Obj.tag repr in
+    if tag = 252 then (* string tag *)
+      `String (Obj.obj repr)
+    else if tag = 253 then (* float tag *)
+      `Float (Obj.obj repr)
+    else
+      `String (to_string v)
+  else
+    `String "<unknown>"
+;;
