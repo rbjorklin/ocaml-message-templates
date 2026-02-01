@@ -68,8 +68,8 @@ let () =
   (* Output: User alice logged in from 192.168.1.1 *)
 
   Yojson.Safe.to_string json |> print_endline;
-  (* Output: {"@t":"2026-01-31T23:54:42-00:00","@m":"User {username} logged in from {ip_address}",
-              "username":"alice","ip_address":"192.168.1.1"} *)
+  (* Output: {"@t":"2026-01-31T23:54:42-00:00","@mt":"User {username} logged in from {ip_address}",
+              "@m":"User alice logged in from 192.168.1.1","username":"alice","ip_address":"192.168.1.1"} *)
 ```
 
 ### Logging Basics
@@ -240,18 +240,22 @@ All log events include a timestamp in RFC3339 format:
 ```json
 {
   "@t": "2026-01-31T23:54:42-00:00",
-  "@m": "User {username} logged in from {ip_address}",
+  "@mt": "User {username} logged in from {ip_address}",
+  "@m": "User alice logged in from 192.168.1.1",
+  "@l": "Information",
   "username": "alice",
   "ip_address": "192.168.1.1",
   "RequestId": "req-123-abc"
 }
 ```
 
-- `@t`: Timestamp in RFC3339 format (ISO 8601 with timezone) - follows CLEF convention
-- `@m`: Message template (the original template string) - follows CLEF convention
+- `@t`: Timestamp in RFC3339 format (ISO 8601 with timezone)
+- `@mt`: Message template (the original template string with placeholders)
+- `@m`: Rendered message (the fully formatted message with values substituted)
+- `@l`: Log level (Verbose, Debug, Information, Warning, Error, Fatal)
 - Additional fields: Captured variables and context properties
 
-The field names `@t` and `@m` follow the [CLEF (Compact Log Event Format)](https://github.com/serilog/serilog-formatting-compact) convention used by Serilog and Seq.
+The field names follow the [CLEF (Compact Log Event Format)](https://github.com/serilog/serilog-formatting-compact) convention used by Serilog and Seq.
 
 ## Performance
 
@@ -345,7 +349,9 @@ This implementation follows the Message Templates specification from https://mes
 - ✅ Format specifiers: `:format` syntax
 - ✅ Alignment specifiers: `,width` syntax
 - ✅ Timestamp field in structured output (uses CLEF `@t` convention)
-- ✅ Message template field in structured output (uses CLEF `@m` convention)
+- ✅ Message template field in structured output (uses CLEF `@mt` convention)
+- ✅ Rendered message field in structured output (uses CLEF `@m` convention)
+- ✅ Log level field in structured output (uses CLEF `@l` convention)
 
 ## License
 

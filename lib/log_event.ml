@@ -39,9 +39,9 @@ let create
 let to_yojson event =
   let base_props =
     [ ("@t", `String (Ptime.to_rfc3339 event.timestamp))
-    ; ("@m", `String event.message_template)
+    ; ("@mt", `String event.message_template)
     ; ("@l", `String (Level.to_string event.level))
-    ; ("@mt", `String event.rendered_message) ]
+    ; ("@m", `String event.rendered_message) ]
   in
   let props = base_props @ event.properties in
   `Assoc props

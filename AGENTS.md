@@ -221,14 +221,18 @@ All log events follow CLEF (Compact Log Event Format):
 ```json
 {
   "@t": "2026-01-31T23:54:42-00:00",
-  "@m": "User {username} logged in from {ip_address}",
+  "@mt": "User {username} logged in from {ip_address}",
+  "@m": "User alice logged in from 192.168.1.1",
+  "@l": "Information",
   "username": "alice",
   "ip_address": "192.168.1.1"
 }
 ```
 
 - `@t`: RFC3339 timestamp
-- `@m`: Message template (original template string)
+- `@mt`: Message template (original template string with placeholders)
+- `@m`: Rendered message (fully formatted with values)
+- `@l`: Log level
 - Additional fields: Captured variables and context properties
 
 ## Notes
