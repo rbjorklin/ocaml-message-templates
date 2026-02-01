@@ -246,3 +246,4 @@ All log events follow CLEF (Compact Log Event Format):
 - **File sinks support rolling**: Daily, Hourly, Infinite, or By_size
 - **Console sinks support colors**: Configurable with templates (ANSI codes)
 - **Follows Message Templates spec**: https://messagetemplates.org/
+- **When in plan mode you are allowed to write to**: .opencode/plans/
