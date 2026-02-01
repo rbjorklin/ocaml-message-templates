@@ -41,27 +41,37 @@ let error config = minimum_level Level.Error config
 
 let fatal config = minimum_level Level.Fatal config
 
-(** Add an Lwt file sink with optional minimum level override *)
+(** Add an Lwt file sink with optional minimum level override. Note: The sink is
+    created lazily on first use to avoid Lwt.t in config *)
 let write_to_file
     ?min_level
     ?(rolling = Lwt_file_sink.Infinite)
     ?(output_template = Lwt_file_sink.default_template)
     path
     config =
+  (* Use a ref to store the sink once created *)
+  let sink_ref = ref None in
+  let get_sink () =
+    match !sink_ref with
+    | Some sink -> Lwt.return sink
+    | None ->
+        let* sink = Lwt_file_sink.create ~rolling ~output_template path in
+        sink_ref := Some sink;
+        Lwt.return sink
+  in
   let sink_fn =
     { Lwt_sink.emit_fn=
         (fun event ->
-          Lwt_file_sink.emit
-            (Lwt_file_sink.create ~rolling ~output_template path)
-            event )
+          let* sink = get_sink () in
+          Lwt_file_sink.emit sink event )
     ; flush_fn=
         (fun () ->
-          Lwt_file_sink.flush
-            (Lwt_file_sink.create ~rolling ~output_template path) )
+          let* sink = get_sink () in
+          Lwt_file_sink.flush sink )
     ; close_fn=
         (fun () ->
-          Lwt_file_sink.close
-            (Lwt_file_sink.create ~rolling ~output_template path) ) }
+          let* sink = get_sink () in
+          Lwt_file_sink.close sink ) }
   in
   let sink_config = {sink_fn; min_level} in
   {config with sinks= sink_config :: config.sinks}

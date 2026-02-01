@@ -1,7 +1,6 @@
 (** Lwt console sink - async console output *)
 
 open Message_templates
-open Lwt.Syntax
 
 (** Console sink type *)
 type t =

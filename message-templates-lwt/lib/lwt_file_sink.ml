@@ -158,10 +158,7 @@ let flush t =
 ;;
 
 (** Close the sink *)
-let close t =
-  let open Lwt.Syntax in
-  Lwt_mutex.with_lock t.mutex (fun () -> Lwt_unix.close t.fd)
-;;
+let close t = Lwt_mutex.with_lock t.mutex (fun () -> Lwt_unix.close t.fd)
 
 (** Create a new Lwt file sink *)
 let create ?(output_template = default_template) ?(rolling = Infinite) base_path
