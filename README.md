@@ -17,6 +17,7 @@ A PPX-based library for Message Templates in OCaml that provides compile-time te
 ### Logging Infrastructure
 - **Log Levels**: Six levels (Verbose, Debug, Information, Warning, Error, Fatal) with proper ordering
 - **Multiple Sinks**: Console (with colors), File (with rolling), Composite, and Null sinks
+- **Async Logging**: Full support for Lwt (monadic) and Eio (effects-based) concurrency
 - **Structured Logging**: Automatic JSON output with timestamps and properties
 - **Context Tracking**: Ambient properties that flow across function calls
 - **Enrichment**: Add contextual properties automatically to all log events
@@ -27,17 +28,34 @@ A PPX-based library for Message Templates in OCaml that provides compile-time te
 
 ## Installation
 
+### Core Library
+
 ```bash
 opam install message-templates message-templates-ppx
 ```
 
-Or add to your `dune-project`:
+### Async Support (Optional)
+
+For Lwt (monadic concurrency):
+```bash
+opam install message-templates-lwt
+```
+
+For Eio (effects-based concurrency):
+```bash
+opam install message-templates-eio
+```
+
+### dune-project Dependencies
 
 ```dune
 (depends
   (ocaml (>= 5.4.0))
   message-templates
   message-templates-ppx
+  ;; Optional: choose one or both
+  (message-templates-lwt (>= 0.1.0))
+  (message-templates-eio (>= 0.1.0))
   yojson
   ptime
   unix)
@@ -101,6 +119,83 @@ let process_user user_id =
   with exn ->
     Log.error ~exn "Failed to process user {user_id}" ["user_id", `Int user_id]
 ```
+
+### Async Logging
+
+#### Lwt Support (Monadic Concurrency)
+
+```ocaml
+open Message_templates
+open Message_templates_lwt
+
+let main () =
+  (* Setup async logger *)
+  let logger = 
+    Configuration.create ()
+    |> Configuration.minimum_level Level.Information
+    |> Configuration.write_to_console ~colors:true ()
+    |> Configuration.write_to_file ~rolling:Daily "app.log"
+    |> Configuration.create_logger
+  in
+
+  (* All log methods return unit Lwt.t *)
+  let* () = Lwt_logger.information logger "Server starting on port {port}" ["port", `Int 8080] in
+  
+  (* Concurrent logging to multiple sinks *)
+  let* () = Lwt_logger.debug logger "Debug info: {user}" ["user", `String "alice"] in
+  
+  (* Clean up *)
+  Lwt_logger.close logger
+
+let () = Lwt_main.run (main ())
+```
+
+**Features:**
+- All operations return `unit Lwt.t` for composable async code
+- Thread-safe file rolling with `Lwt_mutex`
+- Parallel sink emission with `Lwt_list.iter_p`
+- Compatible with existing Lwt workflows
+
+#### Eio Support (Effects-Based Concurrency)
+
+```ocaml
+open Message_templates
+open Message_templates_eio
+
+let run ~stdout ~fs =
+  Eio.Switch.run @@ fun sw ->
+  (* Setup Eio logger - requires switch for fiber management *)
+  let logger =
+    Configuration.create ()
+    |> Configuration.minimum_level Level.Information
+    |> Configuration.write_to_console ~colors:true ()
+    |> Configuration.write_to_file ~rolling:Daily "app.log"
+    |> Configuration.create_logger ~sw
+  in
+
+  (* Synchronous logging - waits for completion *)
+  Eio_logger.information logger "Server starting" [];
+  
+  (* Fire-and-forget logging - runs in background fiber *)
+  Eio_logger.write_async logger "Background task started" [];
+  
+  (* Handle requests *)
+  let handle_request req =
+    Eio_logger.information logger "Request {method} {path}"
+      ["method", `String req.method; "path", `String req.path]
+  in
+  
+  (* Your Eio code here *)
+  ()
+
+let () = Eio_main.run @@ fun env -> run ~stdout:env#stdout ~fs:env#fs
+```
+
+**Features:**
+- Direct-style API (no monads) designed for Eio fibers
+- `write_async` for fire-and-forget background logging
+- Automatic fiber management via `Eio.Switch.t`
+- Compatible with Eio's structured concurrency model
 
 ### PPX Logging (Clean Syntax)
 
@@ -214,6 +309,7 @@ The library uses a PPX rewriter that operates at compile time:
 
 ### Logging Pipeline
 
+**Synchronous:**
 ```
 Application Code
        |
@@ -231,6 +327,52 @@ Filtering (level/property-based)
        |
        v
 Sinks (Console, File, etc.)
+```
+
+**Lwt Async:**
+```
+Application Code
+       |
+       v
+Level Check (fast path)
+       |
+       v
+Template Expansion (via PPX)
+       |
+       v
+Context Enrichment (add ambient properties)
+       |
+       v
+Filtering (level/property-based)
+       |
+       v
+Sinks (Lwt_file_sink, Lwt_console_sink, etc.)
+       |
+       v
+Lwt Promises (concurrent sink emission)
+```
+
+**Eio Async:**
+```
+Application Code
+       |
+       v
+Level Check (fast path)
+       |
+       v
+Template Expansion (via PPX)
+       |
+       v
+Context Enrichment (add ambient properties)
+       |
+       v
+Filtering (level/property-based)
+       |
+       v
+Sinks (Eio_file_sink, Eio_console_sink, etc.)
+       |
+       v
+Eio Fibers (background logging with write_async)
 ```
 
 ## JSON Output Structure
@@ -282,14 +424,23 @@ Run the test suite:
 dune runtest
 ```
 
-This runs 59 tests:
-- Level tests (6)
-- Sink tests (6)
-- Logger tests (7)
-- Configuration tests (13)
-- Global log tests (11)
-- PPX comprehensive tests (8)
-- PPX log level tests (8)
+This runs tests across all packages:
+- **Core library** (59 tests):
+  - Level tests (6)
+  - Sink tests (6)
+  - Logger tests (7)
+  - Configuration tests (13)
+  - Global log tests (11)
+  - PPX comprehensive tests (8)
+  - PPX log level tests (8)
+
+- **Lwt package** (2 tests):
+  - Lwt logger tests
+  - Lwt sink tests
+
+- **Eio package** (2 tests):
+  - Eio logger tests
+  - Eio sink tests
 
 All tests passing ✅
 
@@ -309,10 +460,15 @@ See the `examples/` directory:
 Run examples:
 
 ```bash
+# Core examples
 dune exec examples/basic.exe
 dune exec examples/logging_basic.exe
 dune exec examples/logging_advanced.exe
 dune exec examples/logging_ppx.exe
+
+# Async examples (when available)
+dune exec message-templates-lwt/examples/lwt_example.exe
+dune exec message-templates-eio/examples/eio_example.exe
 ```
 
 ## API Reference
@@ -337,6 +493,22 @@ dune exec examples/logging_ppx.exe
 - `Configuration` - Fluent configuration builder
 - `Log` - Global logger module
 - `Log_context` - Ambient context for properties
+
+### Lwt Async Modules (message-templates-lwt)
+
+- `Lwt_sink` - Async sink interface with `Lwt.t` promises
+- `Lwt_file_sink` - Non-blocking file I/O with rolling
+- `Lwt_console_sink` - Async console output
+- `Lwt_logger` - Lwt-based logger with level checking
+- `Lwt_configuration` - Fluent API for async logger setup
+
+### Eio Async Modules (message-templates-eio)
+
+- `Eio_sink` - Sync sink interface for Eio fibers
+- `Eio_file_sink` - File output using Eio
+- `Eio_console_sink` - Console output using Eio
+- `Eio_logger` - Eio-compatible logger with fiber support
+- `Eio_configuration` - Configuration builder for Eio loggers
 
 ## Compliance with Message Templates Specification
 
