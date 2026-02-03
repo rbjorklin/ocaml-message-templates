@@ -57,4 +57,11 @@
   yojson
   alcotest))
 
+(test
+ (name test_phase6_async_queue)
+ (libraries
+  message-templates
+  alcotest
+  threads))
+
 
