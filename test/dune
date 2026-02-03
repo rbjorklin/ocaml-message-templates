@@ -86,10 +86,17 @@
     threads))
 
 (test
-   (name test_memory_tracking)
+    (name test_memory_tracking)
+    (libraries
+     message-templates
+     alcotest
+     threads))
+
+(executable
+   (name debug_queue_test)
    (libraries
     message-templates
-    alcotest
     threads))
+
 
 
