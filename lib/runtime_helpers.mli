@@ -119,24 +119,24 @@ module Safe_conversions : sig
   val option : 'a t -> 'a option t
 end
 
-(** {2 Deprecated Runtime Conversions}
+(** {2 Runtime Type-Agnostic Conversions}
 
     These functions use the Obj module for runtime type inspection. They are
-    kept for backward compatibility but new code should use explicit type
-    annotations and the Safe_conversions module. *)
+    primarily used by the PPX as a fallback when type information is not
+    available at compile time. For new code, prefer explicit type annotations
+    and the Safe_conversions module. *)
 
 val any_to_string : 'a -> string
-[@@ocaml.deprecated "Use explicit type conversions or Safe_conversions module"]
-(** Convert a value of unknown type to string (uses Obj module) *)
+(** Convert a value of unknown type to string (uses Obj module for runtime
+    type detection). Use explicit type annotations when possible. *)
 
 val any_to_json : 'a -> Yojson.Safe.t
-[@@ocaml.deprecated "Use explicit type conversions or Safe_conversions module"]
-(** Convert a value of unknown type to JSON (uses Obj module) *)
+(** Convert a value of unknown type to JSON (uses Obj module for runtime type
+    detection). Use explicit type annotations when possible. This is the primary
+    fallback used by the PPX when compile-time type information is unavailable. *)
 
 val to_string : 'a -> string
-[@@ocaml.deprecated "Use any_to_string or explicit conversions"]
-(** Deprecated alias for any_to_string *)
+(** Alias for any_to_string *)
 
 val to_json : 'a -> Yojson.Safe.t
-[@@ocaml.deprecated "Use any_to_json or explicit conversions"]
-(** Deprecated alias for any_to_json *)
+(** Alias for any_to_json *)

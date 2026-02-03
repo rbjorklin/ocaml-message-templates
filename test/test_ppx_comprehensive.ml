@@ -58,10 +58,10 @@ let test_empty_template () =
 ;;
 
 let test_mixed_types () =
-  let str_val = "text" in
-  let int_val = 42 in
-  let float_val = 3.14 in
-  let bool_val = false in
+  let str_val : string = "text" in
+  let int_val : int = 42 in
+  let float_val : float = 3.14 in
+  let bool_val : bool = false in
   let msg, _ =
     [%template "{str_val}, {int_val:d}, {float_val:f}, {bool_val:B}"]
   in

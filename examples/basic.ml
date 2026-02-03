@@ -17,8 +17,8 @@ let () =
   Printf.printf "  JSON: %s\n\n" (Yojson.Safe.to_string json2);
 
   (* Test 3: Template with variables *)
-  let username = "alice" in
-  let ip = "192.168.1.1" in
+  let username : string = "alice" in
+  let ip : string = "192.168.1.1" in
   let msg3, json3 = [%template "User {username} logged in from {ip}"] in
   Printf.printf "Test 3 - Template with variables:\n";
   Printf.printf "  Message: %s\n" msg3;
