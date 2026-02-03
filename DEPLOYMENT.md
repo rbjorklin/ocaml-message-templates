@@ -45,7 +45,90 @@ Before deploying to production:
 
 ---
 
-## Performance Tuning
+## Performance Tuning & Benchmarking
+
+### Performance Baseline
+
+The Message Templates library has been benchmarked using `core_bench`. Here are the key performance characteristics:
+
+**Template Rendering:**
+- PPX with 2 variables: ~755ns
+- PPX with 5 variables: ~800ns
+- PPX with format specifiers: ~1.1μs
+- PPX JSON output: ~1.0μs
+
+**vs Alternatives:**
+- Printf simple: ~59ns (13x faster)
+- String concat: ~34ns (22x faster)
+- **Trade-off**: PPX is slower but provides type safety and JSON output
+
+**Sink Performance:**
+- Null sink: ~46ns
+- Console sink: ~4.2μs (I/O bound)
+- Composite sink (3): ~51ns total
+- **Finding**: Sink coordination is negligible; console I/O is the bottleneck
+
+**Event Operations:**
+- Create event: ~45ns
+- Create with 4 properties: ~45ns
+- Event to JSON: ~1.1μs
+- **Finding**: JSON conversion is the hotspot
+
+**Context Operations:**
+- Single property: ~10ns
+- Nested (3 levels): ~25ns
+- **Finding**: Context overhead is negligible
+
+**Filter Operations:**
+- Level filter: ~48ns
+- Property filter: ~50ns
+- Combined filters: ~60ns
+- **Finding**: Filtering is extremely fast
+
+### Running Benchmarks
+
+To measure performance in your environment:
+
+```bash
+# Quick benchmark (0.5 second per test)
+dune exec benchmarks/benchmark.exe -- -ascii -q 0.5
+
+# Longer benchmark with error estimates
+dune exec benchmarks/benchmark.exe -- -ascii -q 2 +time
+
+# View all options
+dune exec benchmarks/benchmark.exe -- -help
+```
+
+**Common options:**
+- `-ascii`: Use ASCII tables (vs Unicode)
+- `-q SECS`: Time per benchmark (default: 10s)
+- `-cycles`: Show CPU cycles
+- `+time`: Show 95% confidence intervals
+- `alloc`: Show memory allocation
+- `gc`: Show garbage collection
+
+### Performance Optimization Strategies
+
+1. **Template-heavy workloads**
+   - Use string concatenation for simple messages
+   - Reserve templates for complex structured data
+   - Benchmark your specific usage pattern
+
+2. **High-volume logging**
+   - Use `Information` or `Warning` minimum level (not `Debug`)
+   - Filter at the sink level, not the logger level
+   - Consider async logging (planned feature)
+
+3. **Minimize allocations**
+   - Avoid creating large context properties
+   - Use format specifiers instead of string formatting
+   - Clean up context properties promptly
+
+4. **I/O bottlenecks**
+   - Console output is ~100x slower than in-memory operations
+   - Write to files asynchronously (planned feature)
+   - Use `Null_sink` for tests
 
 ### Choosing Sync vs Async Logging
 

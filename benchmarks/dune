@@ -3,5 +3,9 @@
  (libraries
   message-templates
   yojson
-  unix)
- (preprocess (pps message-templates-ppx)))
+  unix
+  core_bench
+  core
+  core_unix)
+ (preprocess (pps message-templates-ppx ppx_bench))
+ (modes byte exe))

@@ -21,6 +21,8 @@ depends: [
   "alcotest" {with-test}
   "qcheck" {with-test}
   "mdx" {with-test}
+  "core_bench" {with-dev}
+  "ppx_bench" {with-dev}
   "odoc" {with-doc}
 ]
 build: [
