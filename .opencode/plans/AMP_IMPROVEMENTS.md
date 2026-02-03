@@ -1,7 +1,7 @@
 # OCaml Message Templates - Improvement Plan
 
-**Date**: February 2, 2026  
-**Status**: Production Ready with Identified Improvements  
+**Date**: February 2, 2026
+**Status**: Production Ready with Identified Improvements
 **Current State**: 59 tests passing (mostly), with build failures in async packages and examples
 
 ---
@@ -92,7 +92,7 @@ The OCaml Message Templates library is feature-complete with a comprehensive log
 - **PR Title**: "Fix: Lwt test harness compatibility"
 
 #### 1.2: Fix Deprecated API Usage in Examples
-- **Files**: 
+- **Files**:
   - `examples/basic.ml` (line 22)
   - `examples/comprehensive_dir/main.ml` (line 10)
   - `test/test_ppx_comprehensive.ml` (line 66)
@@ -135,12 +135,12 @@ The OCaml Message Templates library is feature-complete with a comprehensive log
 - **Solution**:
   ```ocaml
   (* Each sink should return Result<unit, error> *)
-  type error = 
+  type error =
     | File_not_found of string
     | Permission_denied of string
     | Disk_full
     | Io_error of string
-  
+
   val write : t -> Log_event.t -> (unit, error) Result.t
   ```
 - **Design Decision**: Should errors be silent (logged to stderr) or propagate?
@@ -155,7 +155,7 @@ The OCaml Message Templates library is feature-complete with a comprehensive log
   module Circuit_breaker : sig
     type state = Closed | Open | Half_open
     type t
-    
+
     val create : failure_threshold:int -> reset_timeout_ms:int -> t
     val call : t -> (unit -> unit) -> bool  (* true if succeeded *)
   end
@@ -192,7 +192,7 @@ The OCaml Message Templates library is feature-complete with a comprehensive log
     val bind : 'a t -> ('a -> 'b t) -> 'b t
     val all : 'a t list -> 'a list t
   end
-  
+
   (* Functors for logger, sinks *)
   module Make_async_logger(C : Concurrent) : ...
   ```
@@ -205,7 +205,7 @@ The OCaml Message Templates library is feature-complete with a comprehensive log
 
 #### 3.2: Standardize Configuration API
 - **Issue**: Configuration module has many chainable methods, but API discovery is poor
-- **Solution**: 
+- **Solution**:
   1. Add builder documentation
   2. Create quick-start guide showing common patterns
   3. Type safety: Ensure configuration methods return concrete types, not polymorphic
@@ -319,12 +319,12 @@ The OCaml Message Templates library is feature-complete with a comprehensive log
 - **Issue**: Currently no buffering or async queueing
 - **Solution**: Add bounded queue between logger and sinks
   ```ocaml
-  val create_async_sink 
+  val create_async_sink
     : ?queue_size:int  (* default: 10000 *)
     -> (Log_event.t -> unit Lwt.t)
     -> Sink.t
   ```
-- **Behavior**: 
+- **Behavior**:
   - Queue events when sink is slow
   - Drop oldest events if queue full (configurable)
   - Expose queue depth metrics
@@ -340,7 +340,7 @@ The OCaml Message Templates library is feature-complete with a comprehensive log
     failed_writes: int;
     queue_depth: int;
   }
-  
+
   val get_metrics : Logger.t -> metrics
   ```
 - **Estimate**: 1.5 hours
@@ -397,7 +397,7 @@ The OCaml Message Templates library is feature-complete with a comprehensive log
 - **PRs**: 3
 
 ### Sprint 2 (Week 1): Robustness
-- **Duration**: 3-4 days  
+- **Duration**: 3-4 days
 - **Tasks**: Phase 2 (error handling, circuit breaker)
 - **Outcome**: Production-hardened logger
 - **PRs**: 3
@@ -492,6 +492,6 @@ Current performance is acceptable (4.3M JSON ops/sec). **Recommendation**: Focus
 
 ---
 
-**Document Owner**: Amp Agent  
-**Last Updated**: February 2, 2026  
+**Document Owner**: Amp Agent
+**Last Updated**: February 2, 2026
 **Next Review**: After Phase 1 completion

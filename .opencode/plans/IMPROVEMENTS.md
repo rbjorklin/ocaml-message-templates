@@ -53,19 +53,19 @@ This document outlines a comprehensive plan to address identified gaps and enhan
    ```ocaml
    open Message_templates
    open Alcotest
-   
+
    let test_json_sink_basic () =
      (* Create temp file, write events, verify JSON structure *)
-     
+
    let test_json_sink_clef_format () =
      (* Verify @t, @mt, @m, @l fields present and correctly formatted *)
-     
+
    let test_json_sink_properties () =
      (* Verify custom properties appear in JSON output *)
-     
+
    let test_json_sink_multiple_events () =
      (* Verify NDJSON format - one event per line *)
-     
+
    let test_json_sink_flush_close () =
      (* Verify proper file handling *)
    ```
@@ -257,7 +257,7 @@ type hole = {
 
 **Tests Implemented (test/test_parser.ml - 5 tests):**
 - `test_positive_alignment` - "{name,10}" → right-aligned, width 10
-- `test_negative_alignment` - "{name,-10}" → left-aligned, width 10  
+- `test_negative_alignment` - "{name,-10}" → left-aligned, width 10
 - `test_alignment_with_format` - "{count,10:d}" → alignment + format
 - `test_alignment_with_operator` - "{@data,-15}" → structure operator + alignment
 - `test_no_alignment` - "{name}" → no alignment specifier
@@ -322,7 +322,7 @@ Test Successful in 0.000s. 6 tests run.
 
 **Root Cause**: In `build_string_render`, the simple case handlers (single hole with no format specifier) were returning `evar ~loc h.name` directly without checking if the operator was `Stringify`.
 
-**Fix Applied**: 
+**Fix Applied**:
 1. Added a helper function `get_hole_expr` that checks the operator type and wraps with `any_to_string` when needed
 2. Restructured the conditional logic to check for format specifiers first, ensuring `Printf.sprintf` is used when formats are present
 
@@ -357,7 +357,7 @@ Test Successful in 0.000s. 6 tests run.
    ```ocaml
    module Async_sink : sig
      type t
-     val create : 
+     val create :
        ?max_queue_size:int ->
        ?overflow_strategy:[`Drop | `Block | `Raise] ->
        Sink.S -> t
@@ -372,7 +372,7 @@ Test Successful in 0.000s. 6 tests run.
        strategy: [`Drop | `Block | `Raise];
        inner: Sink.S;
      }
-     
+
      let emit t event =
        if Queue.length t.queue >= t.max_size then
          match t.strategy with
@@ -400,7 +400,7 @@ Test Successful in 0.000s. 6 tests run.
        inner: Sink.S;
        mutable timer: unit Lwt.t option;
      }
-     
+
      let emit t event =
        t.buffer := event :: !(t.buffer);
        if List.length !(t.buffer) >= t.max_size then
@@ -411,15 +411,15 @@ Test Successful in 0.000s. 6 tests run.
 3. **Update Configuration API**:
    ```ocaml
    (* In configuration.ml *)
-   val write_to_console_async : 
+   val write_to_console_async :
      ?max_queue_size:int ->
      ?colors:bool -> unit -> t -> t
-   
+
    val write_to_file_async :
      ?max_queue_size:int ->
      ?rolling:File_sink.rolling_policy ->
      string -> t -> t
-   
+
    val with_batching :
      ?max_batch_size:int ->
      ?max_delay_ms:int -> t -> t
@@ -573,11 +573,11 @@ Printf.sprintf "User %s logged in from %s" name ip_address
      time_it 100_000 (fun () ->
        Logger.information logger "Test message" []
      )
-   
+
    (* Test console sink *)
    let bench_console_sink () =
      (* Similar setup *)
-   
+
    (* Test composite sink *)
    let bench_composite_sink () =
      (* Multiple sinks *)
@@ -589,7 +589,7 @@ Printf.sprintf "User %s logged in from %s" name ip_address
      time_it 1_000_000 (fun () ->
        Log_context.with_property "key" (`String "value") (fun () -> ())
      )
-   
+
    let bench_context_merge () =
      (* Test property merging cost *)
    ```
@@ -598,7 +598,7 @@ Printf.sprintf "User %s logged in from %s" name ip_address
    ```ocaml
    let bench_level_filter () =
      (* Test level checking speed *)
-   
+
    let bench_property_filter () =
      (* Test property matching cost *)
    ```
@@ -613,7 +613,7 @@ Printf.sprintf "User %s logged in from %s" name ip_address
    ```ocaml
    let bench_vs_logs () =
      (* Compare with 'logs' library *)
-   
+
    let bench_vs_dolog () =
      (* Compare with 'dolog' library *)
    ```
@@ -645,10 +645,10 @@ MessageTemplates: Parse error: Failed to parse template
 1. **Template parse errors with context**:
    ```
    Error: Invalid template syntax at position 12
-   
+
    Template: "Hello {user name}"
                      ^
-   
+
    Hole names can only contain alphanumeric characters and underscores.
    Did you mean: "Hello {user_name}"?
    ```
@@ -656,15 +656,15 @@ MessageTemplates: Parse error: Failed to parse template
 2. **Variable not found errors**:
    ```
    Error: Variable 'username' not found in scope
-   
+
    Template: "User {username} logged in"
                   ^^^^^^^^
-   
+
    Available variables in scope:
    - user : string
    - ip_address : string
    - timestamp : float
-   
+
    Did you mean: 'user'?
    ```
 
@@ -721,7 +721,7 @@ MessageTemplates: Parse error: Failed to parse template
    (* In log_context.ml *)
    val with_correlation_id : string -> (unit -> 'a) -> 'a
    val get_correlation_id : unit -> string option
-   
+
    (* Auto-generate if not provided *)
    val with_correlation_id_auto : (unit -> 'a) -> 'a
    ```
@@ -733,9 +733,9 @@ MessageTemplates: Parse error: Failed to parse template
      ...
      correlation_id: string option;  (* New field *)
    }
-   
+
    let to_yojson event =
-     `Assoc ([...] @ 
+     `Assoc ([...] @
        match event.correlation_id with
        | Some id -> [("CorrelationId", `String id)]
        | None -> [])
@@ -773,12 +773,12 @@ MessageTemplates: Parse error: Failed to parse template
 1. **Redaction configuration**:
    ```ocaml
    (* lib/redaction.ml *)
-   type t = 
+   type t =
    | Redact_all  (* Replace with "***" *)
    | Redact_partial of {show_first: int; show_last: int}
    | Hash of [ `Md5 | `Sha256 ]
    | Custom of (string -> string)
-   
+
    val redact : t -> string -> string
    ```
 
@@ -833,7 +833,7 @@ MessageTemplates: Parse error: Failed to parse template
        user_agent: string option;
        client_ip: string option;
      }
-     
+
      val with_request : (t -> 'a) -> 'a
      val log_request_start : unit -> unit
      val log_request_end : ?status:int -> unit -> unit
@@ -881,7 +881,7 @@ Parser logic exists in two places:
      type parsed_template
      val parse : string -> (parsed_template, string) result
    end
-   
+
    (* Shared implementation *)
    module Make_parser(Types : Template_types.S) : S
    ```
@@ -890,7 +890,7 @@ Parser logic exists in two places:
    ```ocaml
    (* lib/template_parser.ml *)
    module Parser = Make_parser(Types)
-   
+
    (* ppx/template_parser.ml *)
    module Parser = Make_parser(Ppx_types)
    ```
@@ -925,7 +925,7 @@ Parser logic exists in two places:
 2. **Add comprehensive odoc comments**:
    ```ocaml
    (** {2 Log Levels}
-       
+
        Six standard log levels ordered by severity:
        - Verbose: Detailed diagnostic information
        - Debug: Information useful for debugging

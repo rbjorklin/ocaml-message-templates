@@ -130,13 +130,13 @@ val create_event :
 (** Logger signature - main interface for logging *)
 module type LOGGER = sig
   type t
-  
+
   (** Core write method *)
   val write : t -> ?exn:exn -> Level.t -> string -> (string * Yojson.Safe.t) list -> unit
-  
+
   (** Level checking *)
   val is_enabled : t -> Level.t -> bool
-  
+
   (** Convenience methods for each level *)
   val verbose : t -> ?exn:exn -> string -> (string * Yojson.Safe.t) list -> unit
   val debug : t -> ?exn:exn -> string -> (string * Yojson.Safe.t) list -> unit
@@ -144,11 +144,11 @@ module type LOGGER = sig
   val warning : t -> ?exn:exn -> string -> (string * Yojson.Safe.t) list -> unit
   val error : t -> ?exn:exn -> string -> (string * Yojson.Safe.t) list -> unit
   val fatal : t -> ?exn:exn -> string -> (string * Yojson.Safe.t) list -> unit
-  
+
   (** Context enrichment *)
   val for_context : t -> string -> Yojson.Safe.t -> t
   val with_enricher : t -> (log_event -> log_event) -> t
-  
+
   (** Sub-loggers for specific source types *)
   val for_source : t -> string -> t
 end
@@ -164,13 +164,13 @@ end
 (** Sink signature - writes log events to destinations *)
 module type SINK = sig
   type t
-  
+
   (** Emit a log event to the sink *)
   val emit : t -> log_event -> unit
-  
+
   (** Flush any buffered output *)
   val flush : t -> unit
-  
+
   (** Close the sink and release resources *)
   val close : t -> unit
 end
@@ -183,7 +183,7 @@ end
 module Console_sink : sig
   type t
   include SINK with type t := t
-  
+
   val create :
     ?output_template:string ->
     ?colors:bool ->
@@ -196,13 +196,13 @@ end
 module File_sink : sig
   type t
   include SINK with type t := t
-  
+
   type rolling_interval =
     | Infinite    (* Never roll *)
     | Daily
     | Hourly
     | By_size of int64  (* Roll when file exceeds size in bytes *)
-  
+
   val create :
     path:string ->
     ?output_template:string ->
@@ -216,7 +216,7 @@ end
 module Composite_sink : sig
   type t
   include SINK with type t := t
-  
+
   val create : (module SINK with type t = 'a) list -> t
 end
 
@@ -259,7 +259,7 @@ val default_file_template : string
 (** Enricher signature - adds properties to log events *)
 module type ENRICHER = sig
   type t
-  
+
   (** Enrich a log event by adding properties *)
   val enrich : t -> log_event -> log_event
 end
@@ -292,16 +292,16 @@ val composite_enricher : (module ENRICHER) list -> (module ENRICHER)
 module Log_context : sig
   (** Push a property onto the context stack *)
   val push_property : string -> Yojson.Safe.t -> unit
-  
+
   (** Pop the most recent property *)
   val pop_property : unit -> unit
-  
+
   (** Get all current context properties *)
   val current_properties : unit -> (string * Yojson.Safe.t) list
-  
+
   (** Clear all context properties *)
   val clear : unit -> unit
-  
+
   (** Execute function with temporary property (auto-pops on exit) *)
   val with_property : string -> Yojson.Safe.t -> (unit -> 'a) -> 'a
 end
@@ -317,7 +317,7 @@ end
 (** Filter signature - determines if an event should be logged *)
 module type FILTER = sig
   type t
-  
+
   (** Return true if the event should be included *)
   val is_included : t -> log_event -> bool
 end
@@ -353,13 +353,13 @@ val not_filter : (module FILTER) -> (module FILTER)
 (** Logger configuration - fluent builder API *)
 module Configuration : sig
   type t
-  
+
   (** Create a new configuration *)
   val create : unit -> t
-  
+
   (** Set minimum level *)
   val minimum_level : Level.t -> t -> t
-  
+
   (** Convenience methods for common levels *)
   val verbose : t -> t
   val debug : t -> t
@@ -367,23 +367,23 @@ module Configuration : sig
   val warning : t -> t
   val error : t -> t
   val fatal : t -> t
-  
+
   (** Add a sink with optional minimum level override *)
   val write_to :
     ?min_level:Level.t ->
     (module SINK with type t = 'a) ->
     t ->
     t
-  
+
   (** Add an enricher *)
   val enrich_with : (module ENRICHER with type t = 'a) -> t -> t
-  
+
   (** Add a static property *)
   val enrich_with_property : string -> Yojson.Safe.t -> t -> t
-  
+
   (** Add a filter *)
   val filter_by : (module FILTER with type t = 'a) -> t -> t
-  
+
   (** Create the logger *)
   val create_logger : t -> (module LOGGER)
 end
@@ -416,19 +416,19 @@ let logger =
 module Log : sig
   (** The global logger instance *)
   val mutable logger : (module LOGGER)
-  
+
   (** Set the global logger *)
   val set_logger : (module LOGGER) -> unit
-  
+
   (** Close and flush the global logger *)
   val close_and_flush : unit -> unit
-  
+
   (** Check if a level is enabled *)
   val is_enabled : Level.t -> bool
-  
+
   (** Write with explicit level *)
   val write : ?exn:exn -> Level.t -> string -> (string * Yojson.Safe.t) list -> unit
-  
+
   (** Level-specific methods *)
   val verbose : ?exn:exn -> string -> (string * Yojson.Safe.t) list -> unit
   val debug : ?exn:exn -> string -> (string * Yojson.Safe.t) list -> unit
@@ -436,7 +436,7 @@ module Log : sig
   val warning : ?exn:exn -> string -> (string * Yojson.Safe.t) list -> unit
   val error : ?exn:exn -> string -> (string * Yojson.Safe.t) list -> unit
   val fatal : ?exn:exn -> string -> (string * Yojson.Safe.t) list -> unit
-  
+
   (** Create contextual logger *)
   val for_context : string -> Yojson.Safe.t -> (module LOGGER)
   val for_source : string -> (module LOGGER)
@@ -715,11 +715,11 @@ let () =
     |> Configuration.create_logger
   in
   Log.set_logger logger;
-  
+
   (* Log messages *)
   let user = "alice" in
   Log.information "User {user} logged in" ["user", `String user];
-  
+
   (* Cleanup *)
   Log.close_and_flush ()
 ```
@@ -730,15 +730,15 @@ let () =
 open Message_templates
 
 let () =
-  Log.set_logger (Configuration.create () 
+  Log.set_logger (Configuration.create ()
     |> Configuration.write_to (module Console_sink)
     |> Configuration.create_logger);
-  
+
   let username = "alice" in
   let ip = "192.168.1.1" in
-  
+
   [%log.information "User {username} logged in from {ip}"];
-  
+
   Log.close_and_flush ()
 ```
 
@@ -751,7 +751,7 @@ let () =
   let logger =
     Configuration.create ()
     |> Configuration.minimum_level Level.Debug
-    |> Configuration.write_to 
+    |> Configuration.write_to
          (module Console_sink)
          ~output_template:"[{Timestamp:HH:mm:ss} {Level:u3}] {Message}{NewLine}{Exception}"
     |> Configuration.write_to ~min_level:Level.Warning
@@ -763,14 +763,14 @@ let () =
     |> Configuration.filter_by (property_filter "UserId" (fun _ -> true))
     |> Configuration.create_logger
   in
-  
+
   Log.set_logger logger;
-  
+
   (* Use context properties *)
   Log_context.with_property "RequestId" (`String "abc-123") (fun () ->
     Log.information "Processing request" []
   );
-  
+
   Log.close_and_flush ()
 ```
 

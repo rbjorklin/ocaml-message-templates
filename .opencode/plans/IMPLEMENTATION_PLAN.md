@@ -121,25 +121,25 @@ let hole_name = take_while1 (function
   | '0'..'9' | 'a'..'z' | 'A'..'Z' | '_' -> true
   | _ -> false)
 
-let operator = option `Default (char '@' *> return `Structure <|> 
+let operator = option `Default (char '@' *> return `Structure <|>
                                  char '$' *> return `Stringify)
 
 let format_spec = char ':' *> take_while1 (fun c -> c <> '}')
 
-let alignment = char ',' *> 
+let alignment = char ',' *>
   option false (char '-' *> return true) >>= fun neg ->
   take_while1 (function '0'..'9' -> true | _ -> false) >>| fun n ->
   (neg, int_of_string n)
 
-let hole = 
-  char '{' *> 
+let hole =
+  char '{' *>
   operator >>= fun op ->
   hole_name >>= fun name ->
   option None (alignment >>| fun a -> Some a) >>= fun align ->
   option None (format_spec >>| fun f -> Some f) >>= fun fmt ->
   char '}' *> return (Hole { name; operator = op; format = fmt; alignment = align })
 
-let escaped_brace = string "{{" *> return (Text "{") <|> 
+let escaped_brace = string "{{" *> return (Text "{") <|>
                     string "}}" *> return (Text "}")
 
 let text = take_while1 (fun c -> c <> '{') >>| fun s -> Text s
@@ -167,7 +167,7 @@ type scope = {
 let rec find_variable scope var_name =
   match List.assoc_opt var_name scope.bindings with
   | Some ty -> Some ty
-  | None -> 
+  | None ->
       match scope.outer_scopes with
       | [] -> None
       | outer :: rest -> find_variable { scope with bindings = outer.bindings; outer_scopes = rest } var_name
@@ -175,8 +175,8 @@ let rec find_variable scope var_name =
 (* Hard error on undefined variable *)
 let validate_variable ~loc scope var_name =
   match find_variable scope var_name with
-  | None -> 
-      Location.raise_errorf ~loc 
+  | None ->
+      Location.raise_errorf ~loc
         "MessageTemplates: Variable '%s' not found in scope. " ^^
         "Ensure the variable is defined before using it in a template."
         var_name
@@ -191,7 +191,7 @@ The PPX tracks bindings through AST nodes:
 let rec analyze_scope ast =
   match ast with
   | { pexp_desc = Pexp_let (_, vbs, body); _ } ->
-      let new_bindings = List.map (fun vb -> 
+      let new_bindings = List.map (fun vb ->
         (Pat.to_string vb.pvb_pat, vb.pvb_expr.pexp_type)
       ) vbs in
       analyze_scope body
@@ -215,10 +215,10 @@ For a template `"User {username} logged in from {ip_address}"`:
 ```ocaml
 (* Generated code *)
 let __template_result =
-  let __string_render = 
+  let __string_render =
     Printf.sprintf "User %s logged in from %s" username ip_address
   in
-  let __structured_render = 
+  let __structured_render =
     `Assoc [
       ("template", `String "User {username} logged in from {ip_address}");
       ("username", `String username);
@@ -239,7 +239,7 @@ let yojson_of_value ~loc (expr : expression) (ty : core_type option) =
   | Some [%type: bool] -> [%expr `Bool [%e expr]]
   | Some [%type: int64] -> [%expr `Intlit (Int64.to_string [%e expr])]
   | Some [%type: Yojson.Safe.t] -> expr  (* Already JSON *)
-  | _ -> 
+  | _ ->
       (* Fallback: convert to string *)
       [%expr `String (Format.asprintf "%a" pp [%e expr])]
 ```
@@ -250,9 +250,9 @@ let yojson_of_value ~loc (expr : expression) (ty : core_type option) =
 let apply_operator ~loc op expr ty =
   match op with
   | `Default -> yojson_of_value ~loc expr ty
-  | `Structure -> 
+  | `Structure ->
       (* Assume value is already Yojson.Safe.t or can be converted *)
-      [%expr 
+      [%expr
         match [%e expr] with
         | #Yojson.Safe.t as json -> json
         | v -> `String (Yojson.Safe.to_string v)
@@ -275,19 +275,19 @@ let name = "template"
 let expand ~ctxt template_str =
   let loc = Expansion_context.Extension.extension_point_loc ctxt in
   let scope = Expansion_context.Extension.bindings ctxt in
-  
+
   (* 1. Parse the template *)
   let parsed = match Angstrom.parse_string ~consume:All template_parser template_str with
     | Ok parts -> parts
     | Error msg -> Location.raise_errorf ~loc "MessageTemplates: Parse error: %s" msg
   in
-  
+
   (* 2. Extract hole names and validate scope *)
   let holes = extract_holes parsed in
   List.iter (fun hole ->
     ignore (validate_variable ~loc scope hole.name)
   ) holes;
-  
+
   (* 3. Generate code *)
   generate_template_code ~loc scope parsed
 
@@ -308,21 +308,21 @@ let () = Driver.register_transformation ~rules:[rule] "message-templates"
 let generate_template_code ~loc scope parts =
   (* Build format string for Printf *)
   let fmt_string = build_format_string parts in
-  
+
   (* Collect variable expressions *)
   let var_exprs = List.filter_map (function
     | Text _ -> None
-    | Hole h -> 
+    | Hole h ->
         let var = evar ~loc h.name in
         Some (apply_format ~loc h var)
   ) parts in
-  
+
   (* Build string render *)
-  let string_render = 
-    eapply ~loc (evar ~loc "Printf.sprintf") 
+  let string_render =
+    eapply ~loc (evar ~loc "Printf.sprintf")
       (estring ~loc fmt_string :: var_exprs)
   in
-  
+
   (* Build structured render *)
   let properties = List.filter_map (function
     | Text _ -> None
@@ -331,11 +331,11 @@ let generate_template_code ~loc scope parts =
         let value_expr = apply_operator ~loc h.operator (evar ~loc h.name) ty in
         Some (h.name, value_expr)
   ) parts in
-  
+
   let template_field = ("template", estring ~loc (reconstruct_template parts)) in
   let assoc_fields = template_field :: properties in
   let json_expr = make_yojson_assoc ~loc assoc_fields in
-  
+
   (* Return tuple: (string, Yojson.Safe.t) *)
   pexp_tuple ~loc [string_render; json_expr]
 ```
@@ -375,13 +375,13 @@ open Message_templates
 let () =
   let username = "alice" in
   let ip_address = "192.168.1.1" in
-  
+
   (* Pattern 2: Auto-capture from scope *)
   let msg, json = [%template "User {username} logged in from {ip_address}"] in
-  
+
   Printf.printf "%s\n" msg;
   (* Output: User alice logged in from 192.168.1.1 *)
-  
+
   Yojson.Safe.to_string json |> print_endline;
   (* Output: {"template":"User {username} logged in from {ip_address}",
              "username":"alice",
@@ -394,10 +394,10 @@ let () =
 let () =
   let user = { id = 42; name = "Alice"; email = "alice@example.com" } in
   let count = 7 in
-  
+
   (* Structure operator: serialize object *)
   let msg, json = [%template "User {@user} made {count} requests"] in
-  
+
   (* json will be:
      {"template":"User {@user} made {count} requests",
       "user":{"id":42,"name":"Alice","email":"alice@example.com"},
@@ -411,11 +411,11 @@ let () =
 let () =
   let count = 42 in
   let amount = 1234.56 in
-  
+
   (* Zero-padded integers *)
   let msg, _ = [%template "ID: {count:00000}"] in
   (* Output: ID: 00042 *)
-  
+
   (* Float formatting *)
   let msg, _ = [%template "Amount: ${amount:.2f}"] in
   (* Output: Amount: $1234.56 *)
@@ -427,7 +427,7 @@ let () =
 let () =
   let username = "alice" in
   (* ip_address NOT defined *)
-  
+
   [%template "User {username} logged in from {ip_address}"]
   (* Compile error:
      MessageTemplates: Variable 'ip_address' not found in scope.
@@ -529,7 +529,7 @@ var ipAddress = "192.168.1.1";
 // Runtime parsing happens every time
 Log.Information("User {username} logged in from {ip_address}", username, ipAddress);
 
-// Serilog stores: 
+// Serilog stores:
 // - Template: "User {username} logged in from {ip_address}"
 // - Properties: { username: "alice", ip_address: "192.168.1.1" }
 ```
@@ -587,7 +587,7 @@ let msg, json = [%template "User {username} logged in from {ip_address}"]
 
 **Serilog Pipeline:**
 ```
-Log Statement → Parse Template → Match Args → Create LogEvent → 
+Log Statement → Parse Template → Match Args → Create LogEvent →
 Enrich → Filter → Format → Output
 ```
 
@@ -636,7 +636,7 @@ This would provide best of both worlds: type-safe by default, dynamic when neede
 ```ocaml
 (* test/test_parser.ml *)
 let test_cases = [
-  ("simple", "Hello {name}", 
+  ("simple", "Hello {name}",
    [Text "Hello "; Hole {name="name"; operator=`Default; format=None; alignment=None}]);
   ("with_format", "Count: {n:000}",
    [Text "Count: "; Hole {name="n"; operator=`Default; format=Some "000"; alignment=None}]);
@@ -654,7 +654,7 @@ let%expect_test "simple template" =
   let username = "alice" in
   let ip_address = "10.0.0.1" in
   [%template "User {username} from {ip_address}"]
-  |> fun (s, j) -> 
+  |> fun (s, j) ->
     print_endline s;
     Yojson.Safe.to_string j |> print_endline;
   [%expect {|
@@ -696,7 +696,7 @@ let prop_parse_render =
 ### 9.1 Syntax Errors
 
 ```ocaml
-[%template "Hello {unclosed"]  
+[%template "Hello {unclosed"]
 (* Error: MessageTemplates: Parse error: unexpected end of input, expected '}' *)
 
 [%template "Hello {invalid-name}"]
@@ -708,7 +708,7 @@ let prop_parse_render =
 ```ocaml
 let () =
   let x = 1 in
-  [%template "{x} + {y}"]  
+  [%template "{x} + {y}"]
   (* Error: MessageTemplates: Variable 'y' not found in scope *)
 ```
 

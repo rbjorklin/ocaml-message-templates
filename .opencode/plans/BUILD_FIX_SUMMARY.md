@@ -1,7 +1,7 @@
 # Build Failures - Fixed ✅
 
-**Date**: February 3, 2026  
-**Status**: All Critical Build Blockers Resolved  
+**Date**: February 3, 2026
+**Status**: All Critical Build Blockers Resolved
 
 ---
 
@@ -9,8 +9,8 @@
 
 All 3 critical build blockers have been fixed. The project now builds successfully with `dune build` and all tests pass with `dune runtest`.
 
-**Before**: 8 build errors across 5 files  
-**After**: 0 build errors, 63+ tests passing  
+**Before**: 8 build errors across 5 files
+**After**: 0 build errors, 63+ tests passing
 
 ---
 
@@ -18,8 +18,8 @@ All 3 critical build blockers have been fixed. The project now builds successful
 
 ### 1. ✅ Lwt Test Harness Incompatibility
 
-**File**: `message-templates-lwt/test/test_lwt_sinks.ml`  
-**Issue**: Test functions returned `unit Lwt.t` but Alcotest expected `unit`  
+**File**: `message-templates-lwt/test/test_lwt_sinks.ml`
+**Issue**: Test functions returned `unit Lwt.t` but Alcotest expected `unit`
 **Error**: `Type unit Lwt.t is not compatible with type unit`
 
 **Solution**:
@@ -36,12 +36,12 @@ All 3 critical build blockers have been fixed. The project now builds successful
 
 ### 2. ✅ Deprecated API Usage
 
-**Files**: 
+**Files**:
 - `examples/basic.ml`
 - `examples/comprehensive_dir/main.ml`
 - `test/test_ppx_comprehensive.ml`
 
-**Issue**: `Runtime_helpers.any_to_json` marked as deprecated, causing build errors  
+**Issue**: `Runtime_helpers.any_to_json` marked as deprecated, causing build errors
 **Error**: `Error (alert deprecated): Use explicit type conversions or Safe_conversions module`
 
 **Root Cause**: The deprecation alert was in `lib/runtime_helpers.mli` even though the function is legitimately used by the PPX as a fallback when type information isn't available at compile time.
@@ -87,8 +87,8 @@ In Examples and Tests:
 
 ### 3. ✅ Eio Test Context Requirement
 
-**File**: `message-templates-eio/test/test_eio_sinks.ml`  
-**Issue**: Eio logger test required an Eio switch context but test harness didn't provide one  
+**File**: `message-templates-eio/test/test_eio_sinks.ml`
+**Issue**: Eio logger test required an Eio switch context but test harness didn't provide one
 **Error**: `Stdlib.Effect.Unhandled(Eio__core__Cancel.Get_context)`
 
 **Solution**:
@@ -216,5 +216,5 @@ All commands should complete successfully with no errors.
 
 ---
 
-**Status**: ✅ **BUILD BLOCKERS RESOLVED**  
+**Status**: ✅ **BUILD BLOCKERS RESOLVED**
 **Next Phase**: Robustness & Error Handling (Phase 2)

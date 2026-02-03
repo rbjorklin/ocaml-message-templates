@@ -83,7 +83,7 @@ Create `lib/async_sink_intf.ml` in the core library:
 module type ASYNC_SINK = sig
   type t
   type 'a promise
-  
+
   val emit : t -> Log_event.t -> unit promise
   val flush : t -> unit promise
   val close : t -> unit promise
@@ -108,7 +108,7 @@ module Async_logger (M : ASYNC) = struct
     filters: (Log_event.t -> bool) list;
     context_properties: (string * Yojson.Safe.t) list;
   }
-  
+
   let write t ?exn level message_template properties =
     if not (is_enabled t level) then
       M.return ()
@@ -164,13 +164,13 @@ end
 (** Convert sync sink to Lwt sink *)
 module Sync_to_lwt (S : Sink.S) : LWT_SINK with type t = S.t = struct
   type t = S.t
-  
+
   let emit t event =
     Lwt.return (S.emit t event)
-  
+
   let flush t =
     Lwt.return (S.flush t)
-  
+
   let close t =
     Lwt.return (S.close t)
 end
@@ -181,9 +181,9 @@ end
 ```ocaml
 module Lwt_file_sink : sig
   include LWT_SINK
-  
+
   type rolling_interval = Infinite | Daily | Hourly
-  
+
   val create :
     ?output_template:string ->
     ?rolling:rolling_interval ->
@@ -199,7 +199,7 @@ end = struct
     mutable last_roll_time: Ptime.t;
     mutex: Lwt_mutex.t;  (* For thread-safe rolling *)
   }
-  
+
   let emit t event =
     Lwt_mutex.with_lock t.mutex (fun () ->
       let* () = check_and_roll t event in
@@ -222,14 +222,14 @@ module Configuration = struct
     context_properties: (string * Yojson.Safe.t) list;
     batching: batching_config option;
   }
-  
+
   (** Add Lwt file sink *)
   val write_to_file :
     ?min_level:Level.t ->
     ?rolling:File_sink.rolling_interval ->
     ?output_template:string ->
     string -> t -> t
-  
+
   (** Add Lwt console sink *)
   val write_to_console :
     ?min_level:Level.t ->
@@ -237,13 +237,13 @@ module Configuration = struct
     ?stderr_threshold:Level.t ->
     ?output_template:string ->
     unit -> t -> t
-  
+
   (** Wrap with batching *)
   val with_batching :
     ?max_batch_size:int ->
     ?max_delay_ms:int ->
     t -> t
-  
+
   (** Create Lwt logger *)
   val create_logger : t -> Lwt_logger.t
 end
@@ -303,7 +303,7 @@ end
 (** Eio is direct-style, so we use effects for concurrency *)
 module Eio_file_sink : sig
   include EIO_SINK
-  
+
   val create :
     sw:Eio.Switch.t ->
     fs:#Eio.Fs.dir Eio.Path.t ->
@@ -322,7 +322,7 @@ end = struct
     sw: Eio.Switch.t;
     mutex: Eio.Mutex.t;
   }
-  
+
   let emit t event =
     Eio.Mutex.use t.mutex (fun () ->
       check_and_roll t event;
@@ -337,20 +337,20 @@ end
 ```ocaml
 module Eio_logger : sig
   type t
-  
+
   val create :
     sw:Eio.Switch.t ->
     min_level:Level.t ->
     sinks:(module EIO_SINK with type t = 'a) list ->
     t
-  
+
   (** All methods run in current fiber, but sinks may use background fibers *)
   val write : t -> ?exn:exn -> Level.t -> string -> (string * Yojson.Safe.t) list -> unit
-  
+
   val information : t -> ?exn:exn -> string -> (string * Yojson.Safe.t) list -> unit
   val debug : t -> ?exn:exn -> string -> (string * Yojson.Safe.t) list -> unit
   (* ... etc *)
-  
+
   (** Fire-and-forget logging - runs in background fiber *)
   val write_async : t -> ?exn:exn -> Level.t -> string -> (string * Yojson.Safe.t) list -> unit
 end = struct
@@ -361,7 +361,7 @@ end = struct
     filters: (Log_event.t -> bool) list;
     sw: Eio.Switch.t;
   }
-  
+
   let write_async t ?exn level msg props =
     (* Spawn background fiber for logging *)
     Eio.Fiber.fork ~sw:t.sw (fun () ->
@@ -379,14 +379,14 @@ end
 ```ocaml
 module Configuration = struct
   type t = { (* similar to Lwt *) }
-  
+
   (** Add Eio file sink *)
   val write_to_file :
     ?min_level:Level.t ->
     ?rolling:File_sink.rolling_interval ->
     ?output_template:string ->
     string -> t -> t
-  
+
   (** Add Eio console sink *)
   val write_to_console :
     ?min_level:Level.t ->
@@ -394,10 +394,10 @@ module Configuration = struct
     ?stderr_threshold:Level.t ->
     ?output_template:string ->
     unit -> t -> t
-  
+
   (** Enable fiber-based background logging *)
   val with_background_logging : ?buffer_size:int -> t -> t
-  
+
   (** Create Eio logger - requires switch for fiber management *)
   val create_logger : sw:Eio.Switch.t -> t -> Eio_logger.t
 end
@@ -419,19 +419,19 @@ let run ~stdout ~fs =
     |> Configuration.with_background_logging ~buffer_size:1000
     |> Configuration.create_logger ~sw
   in
-  
+
   (* Synchronous logging - waits for completion *)
   Eio_logger.information logger "Server starting" [];
-  
+
   (* Fire-and-forget logging - returns immediately *)
   Eio_logger.write_async logger "Background task started" [];
-  
+
   (* In request handler *)
   let handle_request req =
     Eio_logger.information logger "Request {method} {path}"
       ["method", `String req.method; "path", `String req.path]
   in
-  
+
   (* Run server *)
   Eio_net.run_server ~sw handle_request
 ```
@@ -452,7 +452,7 @@ module Batching_sink (M : ASYNC) (S : ASYNC_SINK with type 'a promise = 'a M.t) 
     mutable timer: unit M.t option;
     mutex: M_mutex.t;  (* Abstract over mutex type *)
   }
-  
+
   let emit t event =
     M_mutex.with_lock t.mutex (fun () ->
       t.buffer <- event :: t.buffer;
@@ -462,7 +462,7 @@ module Batching_sink (M : ASYNC) (S : ASYNC_SINK with type 'a promise = 'a M.t) 
         (* Start timer *)
         t.timer <- Some (schedule_flush t)
     )
-  
+
   let flush t =
     M_mutex.with_lock t.mutex (fun () ->
       match t.buffer with
@@ -471,7 +471,7 @@ module Batching_sink (M : ASYNC) (S : ASYNC_SINK with type 'a promise = 'a M.t) 
           t.buffer <- [];
           t.timer <- None;
           (* Flush all events to inner sink *)
-          M.fold_left 
+          M.fold_left
             (fun () event -> S.emit t.inner event)
             (M.return ())
             (List.rev events)
@@ -566,9 +566,9 @@ let () =
 (* After (Lwt) *)
 let () =
   Lwt_main.run begin
-    let logger = 
-      Lwt_configuration.create () 
-      |> Lwt_configuration.create_logger 
+    let logger =
+      Lwt_configuration.create ()
+      |> Lwt_configuration.create_logger
     in
     Lwt_logger.information logger "Starting" []
   end
@@ -585,9 +585,9 @@ let () =
 let () =
   Eio_main.run @@ fun env ->
   Eio.Switch.run @@ fun sw ->
-  let logger = 
-    Eio_configuration.create () 
-    |> Eio_configuration.create_logger ~sw 
+  let logger =
+    Eio_configuration.create ()
+    |> Eio_configuration.create_logger ~sw
   in
   Eio_logger.information logger "Starting" []
 ```
