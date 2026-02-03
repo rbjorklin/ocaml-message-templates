@@ -92,11 +92,5 @@
      alcotest
      threads))
 
-(executable
-   (name debug_queue_test)
-   (libraries
-    message-templates
-    threads))
-
 
 
