@@ -58,10 +58,38 @@
   alcotest))
 
 (test
- (name test_phase6_async_queue)
- (libraries
-  message-templates
-  alcotest
-  threads))
+  (name test_phase6_async_queue)
+  (libraries
+   message-templates
+   alcotest
+   threads))
+
+(test
+   (name test_metrics)
+   (libraries
+    message-templates
+    alcotest
+    threads))
+
+(test
+   (name test_shutdown)
+   (libraries
+    message-templates
+    alcotest
+    threads))
+
+(test
+   (name test_circuit_breaker)
+   (libraries
+    message-templates
+    alcotest
+    threads))
+
+(test
+   (name test_memory_tracking)
+   (libraries
+    message-templates
+    alcotest
+    threads))
 
 
