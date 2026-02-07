@@ -1,11 +1,6 @@
 (executable
  (name benchmark)
- (libraries
-  message-templates
-  yojson
-  unix
-  core_bench
-  core
-  core_unix)
- (preprocess (pps message-templates-ppx ppx_bench))
+ (libraries message-templates yojson unix core_bench core core_unix)
+ (preprocess
+  (pps message-templates-ppx ppx_bench))
  (modes byte exe))

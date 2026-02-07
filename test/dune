@@ -1,96 +1,57 @@
 (test
  (name test_parser)
- (libraries
-  message-templates
-  alcotest))
+ (libraries message-templates alcotest))
 
 (test
  (name test_ppx_comprehensive)
- (libraries
-  message-templates
-  message-templates-ppx
-  yojson
-  unix
-  alcotest)
- (preprocess (pps message-templates-ppx)))
+ (libraries message-templates message-templates-ppx yojson unix alcotest)
+ (preprocess
+  (pps message-templates-ppx)))
 
 (test
  (name test_escape)
- (libraries
-  message-templates
-  alcotest))
+ (libraries message-templates alcotest))
 
 (test
  (name test_level)
- (libraries
-  message-templates
-  alcotest))
+ (libraries message-templates alcotest))
 
 (test
  (name test_sinks)
- (libraries
-  message-templates
-  alcotest))
+ (libraries message-templates alcotest))
 
 (test
  (name test_logger)
- (libraries
-  message-templates
-  alcotest))
+ (libraries message-templates alcotest))
 
 (test
  (name test_configuration)
- (libraries
-  message-templates
-  alcotest))
+ (libraries message-templates alcotest))
 
 (test
  (name test_global_log)
- (libraries
-  message-templates
-  alcotest))
+ (libraries message-templates alcotest))
 
 (test
  (name test_json_sink)
- (libraries
-  message-templates
-  yojson
-  alcotest))
+ (libraries message-templates yojson alcotest))
 
 (test
-  (name test_phase6_async_queue)
-  (libraries
-   message-templates
-   alcotest
-   threads))
+ (name test_phase6_async_queue)
+ (libraries message-templates alcotest threads))
 
 (test
-   (name test_metrics)
-   (libraries
-    message-templates
-    alcotest
-    threads))
+ (name test_metrics)
+ (libraries message-templates alcotest threads))
 
 (test
-   (name test_shutdown)
-   (libraries
-    message-templates
-    alcotest
-    threads))
+ (name test_shutdown)
+ (libraries message-templates alcotest threads))
 
 (test
-   (name test_circuit_breaker)
-   (libraries
-    message-templates
-    alcotest
-    threads))
+ (name test_circuit_breaker)
+ (libraries message-templates alcotest threads))
 
 (test
-    (name test_memory_tracking)
-    (libraries
-     message-templates
-     alcotest
-     threads))
-
-
-
+ (name test_memory_tracking)
+ (libraries message-templates alcotest threads))

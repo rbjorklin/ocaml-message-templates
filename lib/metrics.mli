@@ -7,49 +7,32 @@
     Example:
     {[
       let metrics = Metrics.create () in
-      
+
       (* Record event emission *)
       Metrics.record_event metrics ~sink_id:"file" ~latency_us:1.5;
-      
+
       (* Get sink-specific metrics *)
       let file_metrics = Metrics.get_sink_metrics metrics "file" in
       Printf.printf "Events: %d, Dropped: %d, P95 latency: %.2fμs\n"
-        file_metrics.events_total
-        file_metrics.events_dropped
+        file_metrics.events_total file_metrics.events_dropped
         file_metrics.latency_p95_us;
-      
+
       (* Export all metrics as JSON *)
       let json = Metrics.to_json metrics in
       Yojson.Safe.pretty_to_channel stdout json
-    ]}
-*)
+    ]} *)
 
 (** Per-sink metrics snapshot *)
-type sink_metrics = {
-  sink_id: string;
-  (** Sink identifier *)
-  
-  events_total: int;
-  (** Total events emitted to this sink *)
-  
-  events_dropped: int;
-  (** Events dropped due to queue overflow *)
-  
-  events_failed: int;
-  (** Events that failed during emission *)
-  
-  bytes_written: int;
-  (** Approximate bytes written to sink *)
-  
-  last_error: (exn * float) option;
-  (** Most recent error (exception * timestamp) if any *)
-  
-  latency_p50_us: float;
-  (** Median latency in microseconds *)
-  
-  latency_p95_us: float;
-  (** 95th percentile latency in microseconds *)
-}
+type sink_metrics =
+  { sink_id: string  (** Sink identifier *)
+  ; events_total: int  (** Total events emitted to this sink *)
+  ; events_dropped: int  (** Events dropped due to queue overflow *)
+  ; events_failed: int  (** Events that failed during emission *)
+  ; bytes_written: int  (** Approximate bytes written to sink *)
+  ; last_error: (exn * float) option
+        (** Most recent error (exception * timestamp) if any *)
+  ; latency_p50_us: float  (** Median latency in microseconds *)
+  ; latency_p95_us: float  (** 95th percentile latency in microseconds *) }
 
 (** Metrics tracker (opaque) *)
 type t

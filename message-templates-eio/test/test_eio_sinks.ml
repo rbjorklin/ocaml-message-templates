@@ -3,10 +3,10 @@
 open Message_templates
 open Message_templates_eio
 
-(* Note: Eio logger tests require an Eio switch context.
-   The create_logger function takes an optional ~sw parameter.
-   For now we test the sink only - the full async tests would need
-   Eio_main.run context which isn't available in standard test setup. *)
+(* Note: Eio logger tests require an Eio switch context. The create_logger
+   function takes an optional ~sw parameter. For now we test the sink only - the
+   full async tests would need Eio_main.run context which isn't available in
+   standard test setup. *)
 let test_eio_logger_basic () =
   let logger =
     Configuration.create ()
@@ -14,7 +14,8 @@ let test_eio_logger_basic () =
     |> Configuration.write_to_console ()
     |> Configuration.create_logger
   in
-  (* Just verify logger was created - actual async operations require Eio context *)
+  (* Just verify logger was created - actual async operations require Eio
+     context *)
   Alcotest.(check bool) "Logger created" true (logger <> Obj.magic ())
 ;;
 

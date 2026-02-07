@@ -1,38 +1,36 @@
 (** Non-blocking event queue for async sink batching
 
     This module provides a queue-based wrapper around synchronous sinks,
-    allowing events to be enqueued non-blockingly and flushed asynchronously
-    in the background. This decouples the logger from I/O latency.
+    allowing events to be enqueued non-blockingly and flushed asynchronously in
+    the background. This decouples the logger from I/O latency.
 
     Example:
     {[
       let sink = File_sink.create "app.log" in
       let queue = Async_sink_queue.create default_config sink in
-      
+
       (* Enqueue is non-blocking ~1μs *)
       Async_sink_queue.enqueue queue event;
-      
+
       (* Background thread flushes periodically *)
       let depth = Async_sink_queue.get_queue_depth queue in
       Printf.printf "Pending events: %d\n" depth;
-      
+
       (* Graceful shutdown *)
       Async_sink_queue.flush queue;
-      Async_sink_queue.close queue;
-    ]}
-*)
+      Async_sink_queue.close queue
+    ]} *)
 
 (** Configuration for async queue *)
-type config = {
-  max_queue_size: int;         (** Max events in queue, drops oldest if exceeded *)
-  flush_interval_ms: int;      (** Milliseconds between background flushes *)
-  batch_size: int;             (** Events to flush per batch *)
-  back_pressure_threshold: int; (** Warn if queue depth exceeds this *)
-  error_handler: exn -> unit;  (** Called when sink emit fails *)
-}
+type config =
+  { max_queue_size: int  (** Max events in queue, drops oldest if exceeded *)
+  ; flush_interval_ms: int  (** Milliseconds between background flushes *)
+  ; batch_size: int  (** Events to flush per batch *)
+  ; back_pressure_threshold: int  (** Warn if queue depth exceeds this *)
+  ; error_handler: exn -> unit  (** Called when sink emit fails *) }
 
-(** Default configuration *)
 val default_config : config
+(** Default configuration *)
 
 (** Async sink queue type (opaque) *)
 type t
@@ -53,12 +51,11 @@ val get_queue_depth : t -> int
     @return Number of pending events *)
 
 (** Statistics about queue operations *)
-type stats = {
-  mutable total_enqueued: int;
-  mutable total_emitted: int;
-  mutable total_dropped: int;
-  mutable total_errors: int;
-}
+type stats =
+  { mutable total_enqueued: int
+  ; mutable total_emitted: int
+  ; mutable total_dropped: int
+  ; mutable total_errors: int }
 
 (** Get queue statistics *)
 val get_stats : t -> stats

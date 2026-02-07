@@ -198,9 +198,9 @@ let any_to_string (type a) (v : a) : string =
 ;;
 
 (** Convert a value of unknown type to JSON. This uses the Obj module for
-     runtime type detection. For best results, provide explicit type annotations
-     in templates. This function is used by the PPX as a fallback when type
-     information is not available at compile time. *)
+    runtime type detection. For best results, provide explicit type annotations
+    in templates. This function is used by the PPX as a fallback when type
+    information is not available at compile time. *)
 let any_to_json (type a) (v : a) : Yojson.Safe.t =
   let module O = Obj in
   let repr = O.repr v in
@@ -217,9 +217,9 @@ let any_to_json (type a) (v : a) : Yojson.Safe.t =
     `String "<unknown>"
 ;;
 
-(** These functions are used for runtime type-agnostic conversion.
-    For new code, prefer explicit type annotations for better performance
-    and compile-time guarantees. *)
+(** These functions are used for runtime type-agnostic conversion. For new code,
+    prefer explicit type annotations for better performance and compile-time
+    guarantees. *)
 let to_string : 'a. 'a -> string = fun v -> any_to_string v
 
 let to_json : 'a. 'a -> Yojson.Safe.t = fun v -> any_to_json v

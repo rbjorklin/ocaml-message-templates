@@ -1,15 +1,15 @@
 (** Common patterns and utilities for async logging
 
-    This module documents patterns used across Lwt and Eio async backends.
-    It demonstrates how async-specific logger implementations share common
+    This module documents patterns used across Lwt and Eio async backends. It
+    demonstrates how async-specific logger implementations share common
     structure while adapting to their respective concurrency models.
 
     ## Common Pattern
 
     Both Lwt and Eio async packages follow this pattern:
 
-    1. **Async Sink Functions**: Functions that emit to sinks, returning
-       an async effect (Lwt.t or unit)
+    1. **Async Sink Functions**: Functions that emit to sinks, returning an
+    async effect (Lwt.t or unit)
 
     2. **Composite Sink**: Applies all sinks in parallel for a given effect
 
@@ -26,8 +26,7 @@
     - **File sink initialization**: Lwt delays sink creation, Eio creates
       eagerly
 
-    This module provides documentation and utilities to support this pattern.
-*)
+    This module provides documentation and utilities to support this pattern. *)
 
 (** Composite sink pattern implementation
 
@@ -39,13 +38,13 @@ module Async_sink : sig
       The pattern is:
       {[
         let composite emit_list =
-          fun event -> iter_p (fun emit -> emit event) emit_list
+         fun event -> iter_p (fun emit -> emit event) emit_list
+        ;;
       ]}
 
       where iter_p uses the async model's parallel iteration *)
 
-  val composite_emits :
-    (Log_event.t -> 'a) list -> Log_event.t -> 'a list
+  val composite_emits : (Log_event.t -> 'a) list -> Log_event.t -> 'a list
   (** Apply all emit functions to an event *)
 end
 
@@ -68,10 +67,9 @@ end
 
 (** Utilities *)
 module Async_utils : sig
+  val make_composite : (Log_event.t -> unit) list -> Log_event.t -> unit
   (** Convert a list of sink functions to a composite *)
-  val make_composite :
-    (Log_event.t -> unit) list -> Log_event.t -> unit
 
-  (** Check that type definitions are compatible *)
   val type_check : unit -> unit
+  (** Check that type definitions are compatible *)
 end

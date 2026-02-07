@@ -2,4 +2,10 @@
  (public_name message-templates-lwt)
  (name message_templates_lwt)
  (libraries message-templates lwt lwt.unix yojson ptime unix str)
- (modules lwt_sink lwt_file_sink lwt_console_sink lwt_logger lwt_configuration message_templates_lwt))
+ (modules
+  lwt_sink
+  lwt_file_sink
+  lwt_console_sink
+  lwt_logger
+  lwt_configuration
+  message_templates_lwt))

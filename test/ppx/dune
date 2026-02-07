@@ -1,9 +1,5 @@
 (test
  (name test_ppx_levels)
- (libraries
-  message-templates
-  message-templates-ppx
-  yojson
-  unix
-  alcotest)
- (preprocess (pps message-templates-ppx)))
+ (libraries message-templates message-templates-ppx yojson unix alcotest)
+ (preprocess
+  (pps message-templates-ppx)))

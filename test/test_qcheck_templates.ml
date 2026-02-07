@@ -4,16 +4,13 @@ open QCheck
 
 (** Property: Template parsing doesn't crash *)
 let prop_parsing_safe =
-  Test.make 
-    ~gen:Gen.string_printable
-    ~name:"Template parsing is safe"
-    ~print:Fun.id
-    (fun input ->
+  Test.make ~gen:Gen.string_printable ~name:"Template parsing is safe"
+    ~print:Fun.id (fun input ->
       try
         let _ = Message_templates.Template_parser.parse input in
         true
-      with _ -> true
-    )
+      with _ -> true )
+;;
 
 (** Property: Simple templates render correctly *)
 let prop_simple_template_rendering =
@@ -28,8 +25,8 @@ let prop_simple_template_rendering =
           Message_templates.Runtime_helpers.render_template template []
         in
         rendered = template
-      with _ -> false
-    )
+      with _ -> false )
+;;
 
 (** Property: Variable replacement works *)
 let prop_variable_replacement =
@@ -41,22 +38,26 @@ let prop_variable_replacement =
       try
         let template = "{v1} and {v2}" in
         let rendered =
-          Message_templates.Runtime_helpers.render_template
-            template
+          Message_templates.Runtime_helpers.render_template template
             [("v1", `String val1); ("v2", `String val2)]
         in
         val1 ^ " and " ^ val2 = rendered
-      with _ -> false
-    )
+      with _ -> false )
+;;
 
 (** All tests *)
-let tests = [prop_parsing_safe; prop_simple_template_rendering; prop_variable_replacement]
+let tests =
+  [prop_parsing_safe; prop_simple_template_rendering; prop_variable_replacement]
+;;
 
 (** Run tests *)
 let () =
-  List.iter (fun t ->
-    match Test.check_fun t with
-    | QCheck.Success () -> Printf.printf "✓ %s\n" (Test.get_name t)
-    | QCheck.Failure msg -> Printf.printf "✗ %s: %s\n" (Test.get_name t) msg
-    | QCheck.Error (err, _) -> Printf.printf "✗ %s: %s\n" (Test.get_name t) err
-  ) tests
+  List.iter
+    (fun t ->
+      match Test.check_fun t with
+      | QCheck.Success () -> Printf.printf "✓ %s\n" (Test.get_name t)
+      | QCheck.Failure msg -> Printf.printf "✗ %s: %s\n" (Test.get_name t) msg
+      | QCheck.Error (err, _) ->
+          Printf.printf "✗ %s: %s\n" (Test.get_name t) err )
+    tests
+;;

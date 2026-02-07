@@ -127,13 +127,14 @@ end
     and the Safe_conversions module. *)
 
 val any_to_string : 'a -> string
-(** Convert a value of unknown type to string (uses Obj module for runtime
-    type detection). Use explicit type annotations when possible. *)
+(** Convert a value of unknown type to string (uses Obj module for runtime type
+    detection). Use explicit type annotations when possible. *)
 
 val any_to_json : 'a -> Yojson.Safe.t
 (** Convert a value of unknown type to JSON (uses Obj module for runtime type
     detection). Use explicit type annotations when possible. This is the primary
-    fallback used by the PPX when compile-time type information is unavailable. *)
+    fallback used by the PPX when compile-time type information is unavailable.
+*)
 
 val to_string : 'a -> string
 (** Alias for any_to_string *)
