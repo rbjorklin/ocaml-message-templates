@@ -25,39 +25,17 @@ Filtering (level/property-based)
 Sinks (Console, File, etc.)
 ```
 
-## Build Commands
+## Commands
 
-```bash
-# Build entire project
-dune build
+Build: "dune build @install"
+Test (Ocaml): "dune build @runtest" (NOTE: no output means all tests were successful)
+Format code: "dune build --auto-promote @fmt"
+Generate documentation: "dune build @doc"
+Lint: "dune build @check"
+Run single test executable: "dune exec test/test_ppx_comprehensive.exe"
+Run example: "dune exec examples/logging_clef_ppx.exe"
+Clean and rebuild: "dune clean && dune build @install"
 
-# Run all tests
-dune runtest
-
-# Run a single test executable
-dune exec test/test_level.exe
-dune exec test/test_parser.exe
-dune exec test/test_sinks.exe
-dune exec test/test_logger.exe
-dune exec test/test_configuration.exe
-dune exec test/test_global_log.exe
-dune exec test/test_ppx_comprehensive.exe
-dune exec test/test_escape.exe
-
-# Run examples
-dune exec examples/basic.exe
-dune exec examples/logging_basic.exe
-dune exec examples/logging_advanced.exe
-dune exec examples/logging_ppx.exe
-
-# Clean and rebuild
-dune clean && dune build
-
-# Install dependencies
-opam install . --deps-only
-
-# Format code (if using ocamlformat - not currently configured)
-# dune build @fmt --auto-promote
 ```
 
 ## Code Style Guidelines
@@ -237,8 +215,8 @@ All log events follow CLEF (Compact Log Event Format):
 
 ## Notes
 
-- **Always run tests after changes**: `dune runtest`, no output means all tests were successful
-- **Always format file after editing**: `ocamlformat --inplace <filename>`
+- **Always run tests after changes have been applied**
+- **Always format files after changes have been applied**
 - **Template variables must be in scope**: PPX validates at compile time
 - **Two output formats**: String for display, JSON for structured logging
 - **Level checking is fast-path**: Minimal overhead when disabled
