@@ -11,7 +11,7 @@ doc: "https://ocaml-community.github.io/message-templates"
 bug-reports: "https://github.com/ocaml-community/message-templates/issues"
 depends: [
   "ocaml" {>= "5.4.0"}
-  "dune" {>= "3.0" & >= "3.0"}
+  "dune" {>= "3.21" & >= "3.0"}
   "ppxlib" {>= "0.35.0"}
   "angstrom" {>= "0.15.0"}
   "message-templates" {= version}
@@ -32,3 +32,4 @@ build: [
   ]
 ]
 dev-repo: "git+https://github.com/ocaml-community/message-templates.git"
+x-maintenance-intent: ["(latest)"]

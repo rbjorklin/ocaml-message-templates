@@ -1,4 +1,4 @@
-(lang dune 3.0)
+(lang dune 3.21)
 (using mdx 0.2)
 (name message-templates)
 (version 0.1.0)
