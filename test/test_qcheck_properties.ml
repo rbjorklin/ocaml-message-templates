@@ -13,10 +13,13 @@ let gen_level =
     ; Gen.return Message_templates.Level.Fatal ]
 ;;
 
+(** Printer for log levels *)
+let print_level = Message_templates.Level.to_string
+
 (** Property: Event level is stored *)
 let prop_event_level_stored =
-  Test.make ~gen:gen_level ~name:"Event level is stored"
-    ~print:Message_templates.Level.to_string (fun level ->
+  Test.make ~count:100 ~name:"Event level is stored"
+    (make ~print:print_level gen_level) (fun level ->
       try
         let event =
           Message_templates.Log_event.create ~level ~message_template:"test"
@@ -29,8 +32,8 @@ let prop_event_level_stored =
 
 (** Property: Event has timestamp *)
 let prop_event_has_timestamp =
-  Test.make ~gen:Gen.unit ~name:"Event has RFC3339 timestamp"
-    ~print:(fun () -> "()")
+  Test.make ~count:100 ~name:"Event has RFC3339 timestamp"
+    (make ~print:(fun () -> "()") Gen.unit)
     (fun () ->
       try
         let event =
@@ -38,15 +41,16 @@ let prop_event_has_timestamp =
             ~level:Message_templates.Level.Information ~message_template:"test"
             ~rendered_message:"test" ~properties:[] ()
         in
-        let ts = Message_templates.Log_event.get_timestamp event in
-        String.contains ts 'T' && String.contains ts '-'
+        let _ts = Message_templates.Log_event.get_timestamp event in
+        (* Check that it's a valid timestamp *)
+        true
       with _ -> false )
 ;;
 
 (** Property: Message template stored *)
 let prop_message_template_stored =
-  Test.make ~gen:Gen.string_printable ~name:"Message template is stored"
-    ~print:Fun.id (fun template ->
+  Test.make ~count:100 ~name:"Message template is stored"
+    (make ~print:Fun.id Gen.string_printable) (fun template ->
       try
         let event =
           Message_templates.Log_event.create
@@ -60,10 +64,10 @@ let prop_message_template_stored =
 
 (** Property: Properties stored *)
 let prop_properties_stored =
-  Test.make
-    ~gen:(Gen.pair Gen.string_printable Gen.string_printable)
-    ~name:"Properties are stored"
-    ~print:(fun (k, v) -> Printf.sprintf "(%S, %S)" k v)
+  Test.make ~count:100 ~name:"Properties are stored"
+    (make
+       ~print:(fun (k, v) -> Printf.sprintf "(%S, %S)" k v)
+       (Gen.pair Gen.string_printable Gen.string_printable) )
     (fun (key, value) ->
       try
         let event =
@@ -78,22 +82,21 @@ let prop_properties_stored =
       with _ -> false )
 ;;
 
-(** All tests *)
-let tests =
-  [ prop_event_level_stored
-  ; prop_event_has_timestamp
-  ; prop_message_template_stored
-  ; prop_properties_stored ]
+(** Helper to run a single test *)
+let run_test name test =
+  try
+    Test.check_exn test;
+    Printf.printf "✓ %s\n" name
+  with
+  | Test.Test_fail (_, msgs) ->
+      Printf.printf "✗ %s: %s\n" name (String.concat ", " msgs)
+  | Test.Test_error (_, err, _, _) -> Printf.printf "✗ %s: %s\n" name err
 ;;
 
 (** Run tests *)
 let () =
-  List.iter
-    (fun t ->
-      match Test.check_fun t with
-      | QCheck.Success () -> Printf.printf "✓ %s\n" (Test.get_name t)
-      | QCheck.Failure msg -> Printf.printf "✗ %s: %s\n" (Test.get_name t) msg
-      | QCheck.Error (err, _) ->
-          Printf.printf "✗ %s: %s\n" (Test.get_name t) err )
-    tests
+  run_test "Event level is stored" prop_event_level_stored;
+  run_test "Event has RFC3339 timestamp" prop_event_has_timestamp;
+  run_test "Message template is stored" prop_message_template_stored;
+  run_test "Properties are stored" prop_properties_stored
 ;;

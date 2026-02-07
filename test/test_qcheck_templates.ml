@@ -4,20 +4,20 @@ open QCheck
 
 (** Property: Template parsing doesn't crash *)
 let prop_parsing_safe =
-  Test.make ~gen:Gen.string_printable ~name:"Template parsing is safe"
-    ~print:Fun.id (fun input ->
+  Test.make ~count:100 ~name:"Template parsing is safe"
+    (make ~print:Fun.id Gen.string_printable) (fun input ->
       try
-        let _ = Message_templates.Template_parser.parse input in
+        let _ = Message_templates.Template_parser.parse_template input in
         true
       with _ -> true )
 ;;
 
 (** Property: Simple templates render correctly *)
 let prop_simple_template_rendering =
-  Test.make
-    ~gen:(Gen.pair Gen.string_printable Gen.string_printable)
-    ~name:"Simple templates render correctly"
-    ~print:(fun (a, b) -> Printf.sprintf "(%S, %S)" a b)
+  Test.make ~count:100 ~name:"Simple templates render correctly"
+    (make
+       ~print:(fun (a, b) -> Printf.sprintf "(%S, %S)" a b)
+       (Gen.pair Gen.string_printable Gen.string_printable) )
     (fun (text1, text2) ->
       try
         let template = text1 ^ " text " ^ text2 in
@@ -30,10 +30,10 @@ let prop_simple_template_rendering =
 
 (** Property: Variable replacement works *)
 let prop_variable_replacement =
-  Test.make
-    ~gen:(Gen.pair Gen.string_printable Gen.string_printable)
-    ~name:"Variables are correctly replaced"
-    ~print:(fun (a, b) -> Printf.sprintf "(%S, %S)" a b)
+  Test.make ~count:100 ~name:"Variables are correctly replaced"
+    (make
+       ~print:(fun (a, b) -> Printf.sprintf "(%S, %S)" a b)
+       (Gen.pair Gen.string_printable Gen.string_printable) )
     (fun (val1, val2) ->
       try
         let template = "{v1} and {v2}" in
@@ -45,19 +45,20 @@ let prop_variable_replacement =
       with _ -> false )
 ;;
 
-(** All tests *)
-let tests =
-  [prop_parsing_safe; prop_simple_template_rendering; prop_variable_replacement]
+(** Helper to run a single test *)
+let run_test name test =
+  try
+    Test.check_exn test;
+    Printf.printf "✓ %s\n" name
+  with
+  | Test.Test_fail (_, msgs) ->
+      Printf.printf "✗ %s: %s\n" name (String.concat ", " msgs)
+  | Test.Test_error (_, err, _, _) -> Printf.printf "✗ %s: %s\n" name err
 ;;
 
 (** Run tests *)
 let () =
-  List.iter
-    (fun t ->
-      match Test.check_fun t with
-      | QCheck.Success () -> Printf.printf "✓ %s\n" (Test.get_name t)
-      | QCheck.Failure msg -> Printf.printf "✗ %s: %s\n" (Test.get_name t) msg
-      | QCheck.Error (err, _) ->
-          Printf.printf "✗ %s: %s\n" (Test.get_name t) err )
-    tests
+  run_test "Template parsing is safe" prop_parsing_safe;
+  run_test "Simple templates render correctly" prop_simple_template_rendering;
+  run_test "Variables are correctly replaced" prop_variable_replacement
 ;;
