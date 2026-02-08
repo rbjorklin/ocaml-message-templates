@@ -245,13 +245,11 @@ let generate_template_code ~loc scope parts =
       parts
   in
 
-  (* Add timestamp field - generate at runtime *)
+  (* Add timestamp field - use optimized helper *)
   let timestamp_expr =
     [%expr
       `String
-        ( match Ptime.of_float_s (Unix.gettimeofday ()) with
-        | Some t -> Ptime.to_rfc3339 t
-        | None -> "invalid-time" )]
+        (Message_templates.Runtime_helpers.get_current_timestamp_rfc3339 ())]
   in
   let timestamp_field = ("@t", timestamp_expr) in
 

@@ -38,23 +38,28 @@ let create
   ; correlation_id }
 ;;
 
-(** Escape a string for JSON output *)
+(** Append an escaped string directly to a buffer for JSON output. Avoids
+    intermediate buffer allocation compared to escape_json_string. *)
+let append_escaped_string buf s =
+  let len = String.length s in
+  for i = 0 to len - 1 do
+    match s.[i] with
+    | '"' -> Buffer.add_string buf "\\\""
+    | '\\' -> Buffer.add_string buf "\\\\"
+    | '\b' -> Buffer.add_string buf "\\b"
+    | '\012' -> Buffer.add_string buf "\\f"
+    | '\n' -> Buffer.add_string buf "\\n"
+    | '\r' -> Buffer.add_string buf "\\r"
+    | '\t' -> Buffer.add_string buf "\\t"
+    | c when Char.code c < 0x20 -> Printf.bprintf buf "\\u%04x" (Char.code c)
+    | c -> Buffer.add_char buf c
+  done
+;;
+
+(** Escape a string for JSON output (kept for backward compatibility) *)
 let escape_json_string s =
   let buf = Buffer.create (String.length s + 10) in
-  String.iter
-    (fun c ->
-      match c with
-      | '"' -> Buffer.add_string buf "\\\""
-      | '\\' -> Buffer.add_string buf "\\\\"
-      | '\b' -> Buffer.add_string buf "\\b"
-      | '\012' -> Buffer.add_string buf "\\f"
-      | '\n' -> Buffer.add_string buf "\\n"
-      | '\r' -> Buffer.add_string buf "\\r"
-      | '\t' -> Buffer.add_string buf "\\t"
-      | c when Char.code c < 0x20 ->
-          Buffer.add_string buf (Printf.sprintf "\\u%04x" (Char.code c))
-      | c -> Buffer.add_char buf c )
-    s;
+  append_escaped_string buf s;
   Buffer.contents buf
 ;;
 
@@ -64,10 +69,10 @@ let rec append_json_value buf = function
   | `Bool true -> Buffer.add_string buf "true"
   | `Bool false -> Buffer.add_string buf "false"
   | `Int i -> Buffer.add_string buf (string_of_int i)
-  | `Float f -> Buffer.add_string buf (Printf.sprintf "%.17g" f)
+  | `Float f -> Printf.bprintf buf "%.17g" f
   | `String s ->
       Buffer.add_char buf '"';
-      Buffer.add_string buf (escape_json_string s);
+      append_escaped_string buf s;
       Buffer.add_char buf '"'
   | `Intlit s -> Buffer.add_string buf s
   | `List lst ->
@@ -85,12 +90,12 @@ let rec append_json_value buf = function
         | [] -> ()
         | [(k, v)] ->
             Buffer.add_char buf '"';
-            Buffer.add_string buf (escape_json_string k);
+            append_escaped_string buf k;
             Buffer.add_string buf "\":";
             append_json_value buf v
         | (k, v) :: rest ->
             Buffer.add_char buf '"';
-            Buffer.add_string buf (escape_json_string k);
+            append_escaped_string buf k;
             Buffer.add_string buf "\":";
             append_json_value buf v;
             Buffer.add_char buf ',';
@@ -103,7 +108,7 @@ let rec append_json_value buf = function
 (** Convert a property to JSON and append to buffer *)
 let append_property buf (key, value) =
   Buffer.add_char buf '"';
-  Buffer.add_string buf (escape_json_string key);
+  append_escaped_string buf key;
   Buffer.add_string buf "\":";
   append_json_value buf value
 ;;
@@ -111,7 +116,8 @@ let append_property buf (key, value) =
 (** Convert log event to JSON string. This builds the JSON string directly using
     a Buffer, avoiding intermediate Yojson.Safe.t structures and allocations. *)
 let to_json_string event =
-  let buf = Buffer.create 512 in
+  (* Pre-size buffer based on typical event size *)
+  let buf = Buffer.create 256 in
   Buffer.add_char buf '{';
 
   (* @t - timestamp *)
@@ -121,7 +127,7 @@ let to_json_string event =
 
   (* @mt - message template *)
   Buffer.add_string buf "\"@mt\":\"";
-  Buffer.add_string buf (escape_json_string event.message_template);
+  append_escaped_string buf event.message_template;
   Buffer.add_string buf "\",";
 
   (* @l - level *)
@@ -131,7 +137,7 @@ let to_json_string event =
 
   (* @m - rendered message *)
   Buffer.add_string buf "\"@m\":\"";
-  Buffer.add_string buf (escape_json_string event.rendered_message);
+  append_escaped_string buf event.rendered_message;
   Buffer.add_char buf '"';
 
   (* Correlation ID if present *)
@@ -139,7 +145,7 @@ let to_json_string event =
   | None -> ()
   | Some id ->
       Buffer.add_string buf ",\"CorrelationId\":\"";
-      Buffer.add_string buf (escape_json_string id);
+      append_escaped_string buf id;
       Buffer.add_char buf '"' );
 
   (* Additional properties *)

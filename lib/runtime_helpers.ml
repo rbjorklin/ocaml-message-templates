@@ -61,13 +61,36 @@ let json_to_string = function
   | _ -> "<complex>"
 ;;
 
-(** Render a template by replacing {var} placeholders with values from properties *)
+(** Replace all occurrences of a pattern in a string with a replacement.
+    Optimized single-pass implementation. *)
+let replace_all template pattern replacement =
+  let pattern_len = String.length pattern in
+  let template_len = String.length template in
+  if pattern_len = 0 then
+    template
+  else
+    let buf = Buffer.create (template_len + 100) in
+    let rec scan i =
+      if i > template_len - pattern_len then
+        Buffer.add_substring buf template i (template_len - i)
+      else if String.sub template i pattern_len = pattern then (
+        Buffer.add_string buf replacement;
+        scan (i + pattern_len) )
+      else (
+        Buffer.add_char buf template.[i];
+        scan (i + 1) )
+    in
+    scan 0; Buffer.contents buf
+;;
+
+(** Render a template by replacing {var} placeholders with values from properties.
+    Optimized implementation using replace_all. *)
 let render_template template properties =
   List.fold_left
     (fun acc (name, value) ->
       let placeholder = "{" ^ name ^ "}" in
       let value_str = json_to_string value in
-      Str.global_replace (Str.regexp_string placeholder) value_str acc )
+      replace_all acc placeholder value_str )
     template properties
 ;;
 
@@ -310,14 +333,23 @@ let generic_to_json (type a) (v : a) : Yojson.Safe.t =
 (** Format a timestamp for display *)
 let format_timestamp tm = Ptime.to_rfc3339 tm
 
+(** Get current timestamp as RFC3339 string - optimized for frequent calls *)
+let get_current_timestamp_rfc3339 () =
+  match Ptime.of_float_s (Unix.gettimeofday ()) with
+  | Some t -> Ptime.to_rfc3339 t
+  | None -> "invalid-time"
+;;
+
 (** Format a template string for sink output.
-    Replaces {timestamp}, {level}, and {message} placeholders. *)
+    Replaces {timestamp}, {level}, and {message} placeholders.
+    Optimized single-pass implementation. *)
 let format_sink_template template event =
   let timestamp_str = format_timestamp (Log_event.get_timestamp event) in
   let level_str = Level.to_short_string (Log_event.get_level event) in
   let message_str = Log_event.get_rendered_message event in
+  (* Single-pass replacement using Buffer *)
   template
-  |> Str.global_replace (Str.regexp "{timestamp}") timestamp_str
-  |> Str.global_replace (Str.regexp "{level}") level_str
-  |> Str.global_replace (Str.regexp "{message}") message_str
+  |> replace_all "{timestamp}" timestamp_str
+  |> replace_all "{level}" level_str
+  |> replace_all "{message}" message_str
 ;;

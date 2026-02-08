@@ -136,6 +136,15 @@ val generic_to_json : 'a -> Yojson.Safe.t
 val format_timestamp : Ptime.t -> string
 (** Format a timestamp for display as RFC3339 *)
 
+val get_current_timestamp_rfc3339 : unit -> string
+(** Get current timestamp as RFC3339 string - optimized for frequent calls *)
+
 val format_sink_template : string -> Log_event.t -> string
 (** Format a template string for sink output.
     Replaces {timestamp}, {level}, and {message} placeholders. *)
+
+val replace_all : string -> string -> string -> string
+(** Replace all occurrences of a pattern in a template with a replacement.
+    [replace_all template pattern replacement] scans [template] and replaces all
+    occurrences of [pattern] with [replacement]. Optimized single-pass
+    implementation using Buffer. *)

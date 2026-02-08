@@ -38,7 +38,7 @@ let format_output t (event : Log_event.t) =
   (* Apply color to the level indicator *)
   if t.use_colors then
     let colored_level = colorize (Log_event.get_level event) true level_str in
-    Str.global_replace (Str.regexp level_str) colored_level result
+    Runtime_helpers.replace_all result level_str colored_level
   else
     result
 ;;
