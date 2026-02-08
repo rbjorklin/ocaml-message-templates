@@ -22,12 +22,9 @@ let create
   let ts =
     match timestamp with
     | Some t -> t
-    | None -> (
-        (* Get current time from Unix timestamp *)
-        let now = Unix.gettimeofday () in
-        match Ptime.of_float_s now with
-        | Some t -> t
-        | None -> Ptime.epoch )
+    | None ->
+        (* Use cached timestamp for efficiency *)
+        Timestamp_cache.get_ptime ()
   in
   { timestamp= ts
   ; level

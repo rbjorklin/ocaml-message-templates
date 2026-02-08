@@ -2,6 +2,7 @@
 
 module Types = Types
 module Template_parser = Template_parser
+module Timestamp_cache = Timestamp_cache
 module Runtime_helpers = Runtime_helpers
 module Level = Level
 module Log_event = Log_event

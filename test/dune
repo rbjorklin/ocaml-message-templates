@@ -16,6 +16,7 @@
   test_qcheck_templates
   test_shutdown
   test_sinks
+  test_timestamp_cache
   test_type_coverage)
  (libraries
   alcotest

@@ -6,6 +6,7 @@
  (modes byte exe))
 
 ; Run benchmarks with: dune build @bench
+
 (rule
  (alias bench)
  (action

@@ -1,0 +1,28 @@
+Name                           Time/Run       mWd/Run   mjWd/Run   Prom/Run   Percentage
+ -------------------------- -------------- ------------- ---------- ---------- ------------
+  PPX Simple (2 vars)             91.45ns        99.03w                              0.01%
+  PPX Single Var                  39.09ns        34.01w
+  PPX Many Vars (5)              125.25ns       127.04w                              0.02%
+  PPX with Formats               400.84ns       150.13w                              0.05%
+  PPX JSON Output                332.41ns       175.10w                              0.04%
+  Printf Simple                   58.10ns        55.00w
+  String Concat                   33.88ns        17.00w
+  Printf with Formats            355.09ns        93.00w                              0.04%
+  Null Sink                       31.16ns        11.01w
+  Console Sink                 1_795.64ns       383.56w                              0.23%
+  Composite Sink (3)              35.47ns        36.01w
+  Context push/pop                11.90ns        10.00w
+  Context nested (3)              30.17ns        30.00w
+  Level filter                    33.14ns        16.01w
+  Property filter                 34.57ns        16.01w
+  Combined filters                44.08ns        36.01w
+  Create simple event             30.14ns        11.01w
+  Create event + props            30.22ns        11.01w
+  Event to JSON string           965.21ns       332.30w      0.13w      0.13w        0.12%
+  Level.compare                    1.80ns
+  Level.of_string                 24.01ns         3.00w
+  Level.to_string                  1.28ns
+  Timestamp cache hit         28_478.62ns     3_008.95w      0.32w      0.32w        3.59%
+  Timestamp cache disabled   792_715.83ns   312_320.89w     62.82w     62.82w      100.00%
+  Event creation cached       29_906.06ns    11_009.33w      0.63w      0.63w        3.77%
+  PPX timestamp                   29.84ns        15.01w

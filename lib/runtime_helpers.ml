@@ -333,12 +333,9 @@ let generic_to_json (type a) (v : a) : Yojson.Safe.t =
 (** Format a timestamp for display *)
 let format_timestamp tm = Ptime.to_rfc3339 tm
 
-(** Get current timestamp as RFC3339 string - optimized for frequent calls *)
-let get_current_timestamp_rfc3339 () =
-  match Ptime.of_float_s (Unix.gettimeofday ()) with
-  | Some t -> Ptime.to_rfc3339 t
-  | None -> "invalid-time"
-;;
+(** Get current timestamp as RFC3339 string - optimized for frequent calls Uses
+    millisecond-level caching to reduce syscall overhead *)
+let get_current_timestamp_rfc3339 () = Timestamp_cache.get_rfc3339 ()
 
 (** Format a template string for sink output.
     Replaces {timestamp}, {level}, and {message} placeholders.

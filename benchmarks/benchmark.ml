@@ -199,6 +199,39 @@ let level_of_string () = Level.of_string "Information"
 
 let level_to_string () = Level.to_string Level.Warning
 
+(* ========== Timestamp Cache Benchmarks ========== *)
+
+let timestamp_cache_hit () =
+  (* Rapid calls in same millisecond - should hit cache *)
+  for _ = 1 to 1000 do
+    ignore (Timestamp_cache.get_rfc3339 ())
+  done
+;;
+
+let timestamp_cache_disabled () =
+  Timestamp_cache.set_enabled false;
+  for _ = 1 to 1000 do
+    ignore (Timestamp_cache.get_rfc3339 ())
+  done;
+  Timestamp_cache.set_enabled true
+;;
+
+let event_creation_cached () =
+  (* Event creation uses cached timestamp *)
+  for _ = 1 to 1000 do
+    ignore
+      (Log_event.create ~level:Level.Information
+         ~message_template:"Test message" ~rendered_message:"Test message"
+         ~properties:[] () )
+  done
+;;
+
+let ppx_timestamp () =
+  (* PPX generates timestamp expression *)
+  let _, json = [%template "Test message"] in
+  ignore json
+;;
+
 let () =
   Command_unix.run
     (Bench.make_command
@@ -223,5 +256,10 @@ let () =
        ; Bench.Test.create ~name:"Event to JSON string" event_to_json_string
        ; Bench.Test.create ~name:"Level.compare" level_compare
        ; Bench.Test.create ~name:"Level.of_string" level_of_string
-       ; Bench.Test.create ~name:"Level.to_string" level_to_string ] )
+       ; Bench.Test.create ~name:"Level.to_string" level_to_string
+       ; Bench.Test.create ~name:"Timestamp cache hit" timestamp_cache_hit
+       ; Bench.Test.create ~name:"Timestamp cache disabled"
+           timestamp_cache_disabled
+       ; Bench.Test.create ~name:"Event creation cached" event_creation_cached
+       ; Bench.Test.create ~name:"PPX timestamp" ppx_timestamp ] )
 ;;
