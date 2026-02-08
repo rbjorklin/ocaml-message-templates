@@ -85,3 +85,32 @@ Per [OCamlverse runtime docs](https://ocamlverse.net/content/runtime.html):
 - Generic `add_sink` helper with labeled arguments eliminates ~40% boilerplate
 - All sinks follow same pattern: create -> wrap in sink_fn -> add to config.sinks
 - Extract early to prevent drift between sink type implementations
+
+## Domain-Local Storage for Multicore Caching
+
+### Domain.DLS Pattern
+- Use `Domain.DLS.new_key (fun () -> initial_value)` for per-domain state
+- Each domain calls the initializer function independently on first access
+- No locks needed - domains don't share heap, naturally contention-free
+- Fibers within a domain share the same DLS value
+
+### Atomic Global Flags
+- Use `Atomic.make true` for runtime-configurable global settings
+- `Atomic.set`/`Atomic.get` provide thread-safe access without mutex overhead
+- Pattern used for `Timestamp_cache.set_enabled` to disable caching globally
+
+## Module Registration Requirements
+
+### New Module Checklist
+- Create `.ml` and `.mli` files in `lib/`
+- Add module name to `lib/messageTemplates.ml` exports
+- Build with `dune build @install` to register with LSP
+- LSP "Unbound module" errors are normal before first build
+
+## Time Caching Granularity
+
+### Millisecond Truncation Strategy
+- Truncate to milliseconds first: `Int64.of_float (Unix.gettimeofday () *. 1000.0)`
+- Then convert back to float seconds for `Ptime.of_float_s`
+- Ensures all timestamps within same millisecond have identical Ptime.t values
+- RFC3339 formatting with `~frac_s:3` preserves millisecond precision
