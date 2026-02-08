@@ -109,12 +109,11 @@ let count_holes parts =
     0 parts
 ;;
 
-(** Build string render expression optimized for template complexity *)
+(** Build string render expression. *)
 let rec build_string_render ~loc parts scope =
   let hole_count = count_holes parts in
   let has_formats = has_format_specifiers parts in
 
-  (* Simple case: just text, no variables *)
   if hole_count = 0 then
     match
       parts
@@ -130,10 +129,7 @@ let rec build_string_render ~loc parts scope =
                parts )
         in
         estring ~loc s
-    (* Simple case: single hole with no format, use concatenation *)
   else if hole_count = 1 && not has_formats then
-    (* Helper to get the hole expression, applying stringify operator if
-       needed *)
     let get_hole_expr h =
       match h.operator with
       | Stringify ->
@@ -144,34 +140,19 @@ let rec build_string_render ~loc parts scope =
     in
     match parts with
     | [Text t1; Hole h; Text t2] when t2 = "" ->
-        (* "prefix{var}" -> "prefix" ^ var *)
         [%expr [%e estring ~loc t1] ^ [%e get_hole_expr h]]
-    | [Hole h; Text t2] when t2 = "" ->
-        (* "{var}" -> var *)
-        get_hole_expr h
-    | [Hole h] ->
-        (* "{var}" -> var *)
-        get_hole_expr h
-    | [Text t1; Hole h] ->
-        (* "prefix{var}" -> "prefix" ^ var *)
-        [%expr [%e estring ~loc t1] ^ [%e get_hole_expr h]]
-    | [Hole h; Text t2] ->
-        (* "{var}suffix" -> var ^ "suffix" *)
-        [%expr [%e get_hole_expr h] ^ [%e estring ~loc t2]]
+    | [Hole h; Text t2] when t2 = "" -> get_hole_expr h
+    | [Hole h] -> get_hole_expr h
+    | [Text t1; Hole h] -> [%expr [%e estring ~loc t1] ^ [%e get_hole_expr h]]
+    | [Hole h; Text t2] -> [%expr [%e get_hole_expr h] ^ [%e estring ~loc t2]]
     | [Text t1; Hole h; Text t2] ->
-        (* "prefix{var}suffix" -> "prefix" ^ var ^ "suffix" *)
         [%expr
           [%e estring ~loc t1] ^ [%e get_hole_expr h] ^ [%e estring ~loc t2]]
-    | _ ->
-        (* Fall through to Buffer for complex cases *)
-        build_buffer_render ~loc parts scope
-    (* If format specifiers are present, use Printf.sprintf *)
+    | _ -> build_buffer_render ~loc parts scope
   else if has_formats then
     build_printf_render ~loc parts scope
-    (* Complex case: use Buffer for efficiency *)
   else if hole_count > 2 || List.length parts > 4 then
     build_buffer_render ~loc parts scope
-    (* Default: simple concatenation *)
   else
     build_printf_render ~loc parts scope
 
@@ -228,7 +209,6 @@ and build_printf_render ~loc parts _scope =
 
 (** Generate code for a template *)
 let generate_template_code ~loc scope parts =
-  (* Build optimized string render expression *)
   let string_render = build_string_render ~loc parts scope in
 
   (* Build JSON properties *)
@@ -245,7 +225,6 @@ let generate_template_code ~loc scope parts =
       parts
   in
 
-  (* Add timestamp field - use optimized helper *)
   let timestamp_expr =
     [%expr
       `String

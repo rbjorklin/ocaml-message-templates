@@ -39,29 +39,22 @@ type t =
   ; mutable stats: stats
   ; sink_fn: Log_event.t -> unit (* Underlying sink *) }
 
-(** Helper to safely execute code with mutex held *)
 let with_lock t f =
   Mutex.lock t.lock;
   Fun.protect ~finally:(fun () -> Mutex.unlock t.lock) f
 ;;
 
-(** Emit an event with circuit breaker protection *)
 let emit_with_circuit_breaker t event =
   match t.config.circuit_breaker with
   | None ->
-      (* No circuit breaker: emit directly *)
       t.sink_fn event;
       t.stats.total_emitted <- t.stats.total_emitted + 1
   | Some cb -> (
-    (* Use circuit breaker to protect the sink *)
     match Circuit_breaker.call cb (fun () -> t.sink_fn event) with
     | Some () -> t.stats.total_emitted <- t.stats.total_emitted + 1
-    | None ->
-        (* Circuit breaker is open: count as dropped *)
-        t.stats.total_dropped <- t.stats.total_dropped + 1 )
+    | None -> t.stats.total_dropped <- t.stats.total_dropped + 1 )
 ;;
 
-(** Flush all queued events *)
 let do_flush t =
   let flush_batch () =
     let events_to_emit =
@@ -69,7 +62,6 @@ let do_flush t =
           if t.size = 0 then
             []
           else
-            (* Take up to batch_size events *)
             let batch_count = min t.config.batch_size t.size in
             let events = ref [] in
             for _i = 1 to batch_count do
@@ -79,14 +71,13 @@ let do_flush t =
                   t.events.(t.head) <- None;
                   t.head <- (t.head + 1) mod t.config.max_queue_size;
                   t.size <- t.size - 1
-              | None -> () (* Should not happen *)
+              | None -> ()
             done;
             List.rev !events )
     in
     match events_to_emit with
-    | [] -> false (* No more to flush *)
+    | [] -> false
     | events ->
-        (* Emit outside the lock *)
         List.iter
           (fun event ->
             try emit_with_circuit_breaker t event
@@ -94,18 +85,15 @@ let do_flush t =
               t.config.error_handler exn;
               t.stats.total_errors <- t.stats.total_errors + 1 )
           events;
-        true (* More to flush *)
+        true
   in
-  (* Keep flushing until empty *)
   while flush_batch () do
     ()
   done
 ;;
 
-(** Get current queue depth *)
 let get_queue_depth t = with_lock t (fun () -> t.size)
 
-(** Get statistics *)
 let get_stats t =
   with_lock t (fun () ->
       { total_enqueued= t.stats.total_enqueued
@@ -114,65 +102,48 @@ let get_stats t =
       ; total_errors= t.stats.total_errors } )
 ;;
 
-(** Non-blocking enqueue *)
 let enqueue t event =
   with_lock t (fun () ->
       t.stats.total_enqueued <- t.stats.total_enqueued + 1;
 
       if t.size >= t.config.max_queue_size then (
-        (* Queue full: drop oldest (move head forward) *)
         if t.size > 0 then (
           t.events.(t.head) <- None;
           t.head <- (t.head + 1) mod t.config.max_queue_size;
           t.size <- t.size - 1;
           t.stats.total_dropped <- t.stats.total_dropped + 1 );
-        (* Still drop this event if we hit the limit after dropping *)
         if t.size >= t.config.max_queue_size then
           t.stats.total_dropped <- t.stats.total_dropped + 1
         else (
-          (* Add event after making space *)
           t.events.(t.tail) <- Some event;
           t.tail <- (t.tail + 1) mod t.config.max_queue_size;
           t.size <- t.size + 1;
-
-          (* Warn if approaching limit *)
           if t.size > t.config.back_pressure_threshold then
             Printf.eprintf "Warning: queue depth %d/%d\n" t.size
               t.config.max_queue_size ) )
       else (
-        (* Queue has space: add event *)
         t.events.(t.tail) <- Some event;
         t.tail <- (t.tail + 1) mod t.config.max_queue_size;
         t.size <- t.size + 1;
-
-        (* Warn if approaching limit *)
         if t.size > t.config.back_pressure_threshold then
           Printf.eprintf "Warning: queue depth %d/%d\n" t.size
             t.config.max_queue_size ) )
 ;;
 
-(** Public flush function *)
 let flush t = do_flush t
 
-(** Check if alive *)
 let is_alive t = with_lock t (fun () -> not t.shutdown)
 
-(** Graceful close *)
 let close t =
   with_lock t (fun () -> t.shutdown <- true);
-
-  (* Wait for background thread *)
   ( match t.background_thread with
   | Some thread ->
       (try Thread.join thread with _ -> ());
       t.background_thread <- None
   | None -> () );
-
-  (* Final flush *)
   do_flush t
 ;;
 
-(** Create a new queue *)
 let create config sink_fn =
   let t =
     { events= Array.make config.max_queue_size None
@@ -187,16 +158,13 @@ let create config sink_fn =
         {total_enqueued= 0; total_emitted= 0; total_dropped= 0; total_errors= 0}
     ; sink_fn }
   in
-  (* Start background flush thread *)
   let thread =
     Thread.create
       (fun () ->
         let rec loop () =
           let should_shutdown = with_lock t (fun () -> t.shutdown) in
           if not should_shutdown then (
-            (* Sleep in small increments to allow responsive shutdown *)
             let sleep_chunk = 0.01 in
-            (* 10ms chunks *)
             let total_sleep = float_of_int config.flush_interval_ms /. 1000.0 in
             let start = Unix.gettimeofday () in
             let rec sleep_loop () =

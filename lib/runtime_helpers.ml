@@ -61,8 +61,7 @@ let json_to_string = function
   | _ -> "<complex>"
 ;;
 
-(** Replace all occurrences of a pattern in a string with a replacement.
-    Optimized single-pass implementation. *)
+(** Replace all occurrences of a pattern in a string with a replacement. *)
 let replace_all template pattern replacement =
   let pattern_len = String.length pattern in
   let template_len = String.length template in
@@ -83,8 +82,8 @@ let replace_all template pattern replacement =
     scan 0; Buffer.contents buf
 ;;
 
-(** Render a template by replacing {var} placeholders with values from properties.
-    Optimized implementation using replace_all. *)
+(** Render a template by replacing var placeholders with values from properties.
+*)
 let render_template template properties =
   List.fold_left
     (fun acc (name, value) ->
@@ -94,17 +93,11 @@ let render_template template properties =
     template properties
 ;;
 
-(** Safe conversion using explicit type witnesses.
-
-    This module provides type-specific conversion functions. For best results,
-    use explicit type annotations in your templates. *)
 module Safe_conversions = struct
   type 'a t = 'a -> Yojson.Safe.t
 
-  (** Create a type-specific conversion *)
   let make : 'a. ('a -> Yojson.Safe.t) -> 'a t = fun f -> f
 
-  (** Common conversions *)
   let string : string t = make string_to_json
 
   let int : int t = make int_to_json
@@ -130,10 +123,7 @@ module Safe_conversions = struct
   let option : 'a. 'a t -> 'a option t = fun f -> make (option_to_json f)
 end
 
-(** Generic value to string conversion using Obj module. This is used as a
-    fallback when type information is not available at compile time. NOTE: This
-    uses Obj for runtime type inspection. For production use, prefer explicit
-    type annotations. *)
+(** Generic value to string conversion using Obj module. *)
 let generic_to_string (type a) (v : a) : string =
   let module O = Obj in
   (* Recursively convert a list to string representation *)
@@ -290,8 +280,7 @@ let generic_to_string (type a) (v : a) : string =
   generic_to_string_impl (O.repr v)
 ;;
 
-(** Generic value to JSON conversion. This is a best-effort conversion for
-    unknown types. *)
+(** Generic value to JSON conversion. *)
 let generic_to_json (type a) (v : a) : Yojson.Safe.t =
   let module O = Obj in
   (* Recursive helper to avoid type annotation issues *)
@@ -333,18 +322,14 @@ let generic_to_json (type a) (v : a) : Yojson.Safe.t =
 (** Format a timestamp for display *)
 let format_timestamp tm = Ptime.to_rfc3339 tm
 
-(** Get current timestamp as RFC3339 string - optimized for frequent calls Uses
-    millisecond-level caching to reduce syscall overhead *)
+(** Get current timestamp as RFC3339 string. *)
 let get_current_timestamp_rfc3339 () = Timestamp_cache.get_rfc3339 ()
 
-(** Format a template string for sink output.
-    Replaces {timestamp}, {level}, and {message} placeholders.
-    Optimized single-pass implementation. *)
+(** Format a template string for sink output. *)
 let format_sink_template template event =
   let timestamp_str = format_timestamp (Log_event.get_timestamp event) in
   let level_str = Level.to_short_string (Log_event.get_level event) in
   let message_str = Log_event.get_rendered_message event in
-  (* Single-pass replacement using Buffer *)
   let with_timestamp = replace_all template "{timestamp}" timestamp_str in
   let with_level = replace_all with_timestamp "{level}" level_str in
   replace_all with_level "{message}" message_str

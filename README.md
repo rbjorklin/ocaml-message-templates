@@ -4,29 +4,18 @@ A PPX-based library for Message Templates in OCaml that provides compile-time te
 
 ## Features
 
-### Core Template Features
-- **Compile-time Validation**: Template syntax and variable existence checked at compile time
-- **Type Safety**: Hard compile errors for undefined variables
-- **Dual Output**: Generate both formatted strings and structured JSON output
-- **Automatic Timestamps**: All JSON output includes RFC3339 timestamps (`@t` field)
-- **PPX-driven**: Full compile-time parsing and code generation for zero runtime overhead
-- **Operator Support**: Special operators for structure preservation (`@`) and stringification (`$`)
-- **Format Specifiers**: Support for format strings like `{count:05d}`, `{value:.2f}`, `{flag:B}`
-- **Alignment**: Width and alignment specifiers like `{name,10}` or `{name,-10}`
-- **High Performance**: Comparable to hand-written Printf code with millisecond timestamp caching
-
-### Logging Infrastructure
-- **Log Levels**: Six levels (Verbose, Debug, Information, Warning, Error, Fatal) with full comparison operators
-- **Multiple Sinks**: Console (with colors), File (with rolling), JSON, Composite, and Null sinks
-- **Async Logging**: Non-blocking event queue with circuit breaker protection
-- **Structured Logging**: Automatic JSON output following CLEF format with timestamps and properties
-- **Context Tracking**: Ambient properties and correlation IDs that flow across function calls
-- **Enrichment**: Add contextual properties automatically to all log events
-- **Filtering**: Level-based and property-based filtering with logical combinators
-- **Global Logger**: Static logger access similar to Serilog.Log
-- **PPX Extensions**: Clean syntax with `[%log.level "message {var}"]`
-- **Fluent Configuration**: Easy-to-use configuration builder API
-- **Metrics**: Per-sink observability with latency percentiles and error tracking
+- Compile-time template validation with automatic variable capture from scope
+- Type-safe logging with hard compile errors for undefined variables
+- Dual output: formatted strings and structured JSON (CLEF format)
+- PPX-driven code generation with zero runtime template parsing overhead
+- Operators for structure preservation (`@`) and stringification (`$`)
+- Printf-compatible format specifiers (`:05d`, `.2f`, etc.) and alignment
+- Six log levels with comparison operators
+- Multiple sinks: Console, File (with rolling), JSON, Composite, Null
+- Async logging with non-blocking queue and circuit breaker protection
+- Context tracking with ambient properties and correlation IDs
+- Level-based and property-based filtering
+- Per-sink metrics with latency percentiles
 
 ## Installation
 
@@ -154,12 +143,6 @@ let main () =
 let () = Lwt_main.run (main ())
 ```
 
-**Features:**
-- All operations return `unit Lwt.t` for composable async code
-- Thread-safe file rolling with `Lwt_mutex`
-- Parallel sink emission with `Lwt_list.iter_p`
-- Compatible with existing Lwt workflows
-
 #### Eio Support (Effects-Based Concurrency)
 
 ```ocaml
@@ -195,13 +178,7 @@ let run ~stdout ~fs =
 let () = Eio_main.run @@ fun env -> run ~stdout:env#stdout ~fs:env#fs
 ```
 
-**Features:**
-- Direct-style API (no monads) designed for Eio fibers
-- `write_async` for fire-and-forget background logging
-- Automatic fiber management via `Eio.Switch.t`
-- Compatible with Eio's structured concurrency model
-
-### PPX Logging (Clean Syntax)
+### PPX Logging
 
 Use PPX extensions for even cleaner syntax:
 
@@ -343,80 +320,72 @@ let msg, _ = [%template "Use {{braces}} for literals"] in
 
 ### Type-Safe Conversions
 
-For complex types, use the Safe_conversions module:
-
 ```ocaml
 open Message_templates.Runtime_helpers.Safe_conversions
 
-(* Define a converter for your type *)
 let convert = list (pair int string)
-
-(* Use it to produce JSON *)
 let json = convert [(1, "a"); (2, "b")]
 ```
 
-Available converters:
-- `string`, `int`, `float`, `bool`, `int64`, `int32`, `nativeint`, `char`, `unit`
-- `list converter`, `array converter`, `option converter`
-- `pair c1 c2`, `triple c1 c2 c3`
+Available converters: `string`, `int`, `float`, `bool`, `int64`, `int32`, `nativeint`, `char`, `unit`, `list`, `array`, `option`, `pair`, `triple`
 
 ## Architecture
 
-The library uses a PPX rewriter that operates at compile time:
+The PPX rewriter operates at compile time:
 
-1. **Parse**: Template string parsed into parts using Angstrom
-2. **Validate**: Variable existence checked against lexical scope
-3. **Generate**: OCaml code generated for both string and JSON output
-4. **Zero Overhead**: No runtime parsing - all work done at compile time
+1. Parse template string into parts using Angstrom
+2. Validate variable existence against lexical scope
+3. Generate OCaml code for string and JSON output
+4. Zero runtime parsing overhead
 
 ### Logging Pipeline
 
 **Synchronous:**
 ```
-Application Code
-       |
-       v
-Level Check (fast path)
-       |
-       v
-Template Expansion (via PPX)
-       |
-       v
-Context Enrichment (add ambient properties)
-       |
-       v
-Filtering (level/property-based)
-       |
-       v
-Sinks (Console, File, etc.)
+Application
+    |
+    v
+Level Check
+    |
+    v
+Template Expansion (PPX)
+    |
+    v
+Context Enrichment
+    |
+    v
+Filtering
+    |
+    v
+Sinks
 ```
 
-**Async (with queue):**
+**Async:**
 ```
-Application Code
-       |
-       v
-Level Check (fast path)
-       |
-       v
-Template Expansion (via PPX)
-       |
-       v
-Non-blocking Enqueue (~1μs)
-       |
-       v
-Background Thread (periodic flush)
-       |
-       v
+Application
+    |
+    v
+Level Check
+    |
+    v
+Template Expansion (PPX)
+    |
+    v
+Enqueue
+    |
+    v
+Background Thread
+    |
+    v
 Circuit Breaker (optional)
-       |
-       v
-Sinks (File, Console, etc.)
+    |
+    v
+Sinks
 ```
 
 ## JSON Output Structure
 
-All log events include a timestamp in RFC3339 format:
+Log events follow the [CLEF format](https://github.com/serilog/serilog-formatting-compact):
 
 ```json
 {
@@ -425,19 +394,16 @@ All log events include a timestamp in RFC3339 format:
   "@m": "User alice logged in from 192.168.1.1",
   "@l": "Information",
   "username": "alice",
-  "ip_address": "192.168.1.1",
-  "RequestId": "req-123-abc"
+  "ip_address": "192.168.1.1"
 }
 ```
 
-- `@t`: Timestamp in RFC3339 format (ISO 8601 with timezone)
-- `@mt`: Message template (the original template string with placeholders)
-- `@m`: Rendered message (the fully formatted message with values substituted)
-- `@l`: Log level (Verbose, Debug, Information, Warning, Error, Fatal)
-- `@i`: Correlation ID (when using correlation IDs)
-- Additional fields: Captured variables and context properties
-
-The field names follow the [CLEF (Compact Log Event Format)](https://github.com/serilog/serilog-formatting-compact) convention used by Serilog and Seq.
+- `@t`: RFC3339 timestamp
+- `@mt`: Message template
+- `@m`: Rendered message
+- `@l`: Log level
+- `@i`: Correlation ID (optional)
+- Additional fields: Template variables and context properties
 
 ## Advanced Features
 
@@ -498,29 +464,26 @@ Async_sink_queue.close queue
 
 ### Timestamp Caching
 
-For high-frequency logging, millisecond timestamp caching reduces overhead:
-
 ```ocaml
-(* Enabled by default - can be disabled globally *)
 Timestamp_cache.set_enabled false
 ```
 
 ## Performance
 
-Benchmark results (1 million iterations each):
+Benchmark results (1 million iterations):
 
 ```
-PPX Simple Template:  0.061 seconds (16,403,928 ops/sec)
-Printf Simple:        0.056 seconds (17,753,142 ops/sec)
-String Concat:        0.036 seconds (27,416,081 ops/sec)
+PPX Simple Template:  0.061s (16M ops/sec)
+Printf Simple:        0.056s (18M ops/sec)
+String Concat:        0.036s (27M ops/sec)
 
-PPX with Formats:     0.586 seconds (1,706,083 ops/sec)
-Printf with Formats:  0.356 seconds (2,812,759 ops/sec)
+PPX with Formats:     0.586s (1.7M ops/sec)
+Printf with Formats:  0.356s (2.8M ops/sec)
 
-PPX JSON Output:      0.232 seconds (4,313,078 ops/sec)
+PPX JSON Output:      0.232s (4.3M ops/sec)
 ```
 
-The PPX-generated code has minimal overhead compared to hand-written Printf, with the benefit of compile-time validation and automatic JSON generation with timestamps.
+PPX-generated code has minimal overhead compared to hand-written Printf.
 
 ## Testing
 
@@ -531,28 +494,9 @@ dune runtest
 ```
 
 This runs tests across all packages:
-- **Core library** (comprehensive test suite):
-  - Level tests
-  - Sink tests (Console, File, JSON, Composite, Null)
-  - Logger tests
-  - Configuration tests
-  - Global log tests
-  - PPX comprehensive tests
-  - PPX log level tests
-  - Template parser tests
-  - Escape handling tests
-  - Circuit breaker tests
-  - Metrics tests
-  - Async queue tests
-  - Shutdown tests
-  - Timestamp cache tests
-  - Property-based tests (QCheck)
-
-- **Lwt package**: Lwt logger and sink tests
-
-- **Eio package**: Eio logger and sink tests
-
-All tests passing ✅
+- Core library: Level, Sink, Logger, Configuration, Global log, PPX, Parser, Circuit breaker, Metrics, Async queue tests
+- Lwt package: Lwt logger and sink tests
+- Eio package: Eio logger and sink tests
 
 ## Examples
 
@@ -585,68 +529,54 @@ dune exec message-templates-eio/examples/eio_example.exe
 
 ### Core Modules
 
-- `Level` - Log levels with full comparison operators (=, <>, <, >, <=, >=)
-- `Log_event` - Log event type with timestamp, level, message, properties
-- `Template_parser` - Template string parsing
-- `Types` - Core types (operator, hole, template_part)
+- `Level` - Log levels with comparison operators
+- `Log_event` - Log event type
+- `Template_parser` - Template parsing
+- `Types` - Core types
 
-### Sink Modules
+### Sinks
 
-- `Console_sink` - Console output with colors and templates
-- `File_sink` - File output with rolling (Infinite, Daily, Hourly)
-- `Json_sink` - Pure CLEF/JSON output
-- `Composite_sink` - Route to multiple sinks
-- `Null_sink` - Discard all events (testing)
+- `Console_sink` - Console output with colors
+- `File_sink` - File output with rolling
+- `Json_sink` - CLEF/JSON output
+- `Composite_sink` - Multi-sink routing
+- `Null_sink` - Discard events
 
-### Logger Modules
+### Logging
 
-- `Logger` - Main logger interface with level checking and enrichment
-- `Filter` - Filter predicates (level, property, all/any/not)
-- `Configuration` - Fluent configuration builder
-- `Log` - Global logger module
-- `Log_context` - Ambient context for properties and correlation IDs
+- `Logger` - Logger interface
+- `Filter` - Event filters
+- `Configuration` - Configuration builder
+- `Log` - Global logger
+- `Log_context` - Ambient context
 
-### Reliability Modules
+### Reliability
 
-- `Circuit_breaker` - Error recovery pattern
-- `Async_sink_queue` - Non-blocking event queue
-- `Metrics` - Per-sink observability
-- `Timestamp_cache` - Millisecond timestamp caching
-- `Shutdown` - Graceful shutdown handling
+- `Circuit_breaker` - Error recovery
+- `Async_sink_queue` - Non-blocking queue
+- `Metrics` - Per-sink metrics
+- `Timestamp_cache` - Timestamp caching
+- `Shutdown` - Graceful shutdown
 
-### Utility Modules
+### Lwt (message-templates-lwt)
 
-- `Runtime_helpers` - Type conversions and template rendering
-- `Runtime_helpers.Safe_conversions` - Type-safe JSON converters
+- `Lwt_logger`, `Lwt_configuration`, `Lwt_file_sink`, `Lwt_console_sink`
 
-### Lwt Async Modules (message-templates-lwt)
+### Eio (message-templates-eio)
 
-- `Lwt_logger` - Lwt-based logger with level checking
-- `Lwt_configuration` - Fluent API for async logger setup
-- `Lwt_file_sink` - Non-blocking file I/O with rolling
-- `Lwt_console_sink` - Async console output
+- `Eio_logger`, `Eio_configuration`, `Eio_file_sink`, `Eio_console_sink`
 
-### Eio Async Modules (message-templates-eio)
+## Compliance
 
-- `Eio_logger` - Eio-compatible logger with fiber support
-- `Eio_configuration` - Configuration builder for Eio loggers
-- `Eio_file_sink` - File output using Eio
-- `Eio_console_sink` - Console output using Eio
+Implements the [Message Templates specification](https://messagetemplates.org/):
 
-## Compliance with Message Templates Specification
-
-This implementation follows the Message Templates specification from https://messagetemplates.org/:
-
-- ✅ Named property holes: `{name}`
-- ✅ Positional property holes: `{0}`, `{1}`
-- ✅ Escaped braces: `{{` and `}}`
-- ✅ Operators: `@` for structure, `$` for stringification
-- ✅ Format specifiers: `:format` syntax
-- ✅ Alignment specifiers: `,width` syntax
-- ✅ Timestamp field in structured output (uses CLEF `@t` convention)
-- ✅ Message template field in structured output (uses CLEF `@mt` convention)
-- ✅ Rendered message field in structured output (uses CLEF `@m` convention)
-- ✅ Log level field in structured output (uses CLEF `@l` convention)
+- Named property holes: `{name}`
+- Positional property holes: `{0}`, `{1}`
+- Escaped braces: `{{` and `}}`
+- Operators: `@` for structure, `$` for stringification
+- Format specifiers: `:format` syntax
+- Alignment specifiers: `,width` syntax
+- CLEF output with `@t`, `@mt`, `@m`, `@l` fields
 
 ## License
 
