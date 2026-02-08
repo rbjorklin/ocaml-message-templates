@@ -7,7 +7,7 @@ type t =
   ; output: out_channel }
 
 (** Default console output template *)
-let default_template = "[{timestamp} {level}] {message}"
+let default_template = "{timestamp} [{level}] {message}"
 
 (** Get color code for level *)
 let level_color = function
