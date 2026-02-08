@@ -1,6 +1,47 @@
-(** CLEF/JSON structured logging with PPX - clean syntax + pure JSON output *)
+(** CLEF/JSON structured logging with automatic deriving
+
+    This example demonstrates how to use ppx_deriving_yojson with CLEF output
+    for automatic JSON serialization of your custom types.
+
+    The output is pure CLEF/JSON format suitable for ingestion into structured
+    logging systems like Seq, Elasticsearch, or Splunk. *)
 
 open Message_templates
+
+(* Define domain types with automatic JSON deriving *)
+type user =
+  { id: int
+  ; username: string
+  ; email: string
+  ; department: string }
+[@@deriving yojson]
+
+type request_method =
+  | GET
+  | POST
+  | PUT
+  | DELETE
+[@@deriving yojson]
+
+type response_status =
+  | Success
+  | ClientError of int
+  | ServerError of int
+[@@deriving yojson]
+
+type http_request =
+  { request_id: string
+  ; user: user
+  ; method_: request_method
+  ; path: string
+  ; user_agent: string option }
+[@@deriving yojson]
+
+type http_response =
+  { status: response_status
+  ; duration_ms: float
+  ; bytes_sent: int }
+[@@deriving yojson]
 
 let () =
   (* Clean up any previous output file *)
@@ -18,72 +59,97 @@ let () =
 
   (* Configure the logger with JSON output *)
   let logger = Logger.create ~min_level:Level.Verbose ~sinks:[json_sink] in
-
   Log.set_logger logger;
 
-  (* Use PPX extensions for cleaner syntax with JSON output *)
+  (* Create sample users - automatic JSON conversion with user_to_yojson *)
+  let alice =
+    { id= 1
+    ; username= "alice"
+    ; email= "alice@company.com"
+    ; department= "Engineering" }
+  in
 
-  (* Verbose level - detailed tracing *)
-  let trace_id = "trace-abc-123" in
-  [%log.verbose "Detailed trace: trace_id={trace_id}"];
+  let bob =
+    {id= 2; username= "bob"; email= "bob@company.com"; department= "Marketing"}
+  in
 
-  (* Debug level - developer information *)
-  let config_value = 42 in
-  let debug_mode = true in
-  [%log.debug "Configuration: value={config_value}, debug={debug_mode}"];
+  (* Verbose level - detailed tracing with full user objects *)
+  Log.verbose "Processing user context" [("current_user", user_to_yojson alice)];
 
-  (* Information level - normal operations *)
-  let user = "alice" in
-  let action = "login" in
-  [%log.information "User {user} performed {action}"];
+  (* Simulate login - automatic conversion *)
+  Log.information "User logged in successfully" [("user", user_to_yojson alice)];
 
-  (* Request processing with context *)
-  Log_context.with_property "RequestId" (`String "req-xyz-789") (fun () ->
-      let endpoint = "/api/users" in
-      let method_ = "POST" in
-      [%log.debug "Processing {method_} request to {endpoint}"];
+  (* Simulate HTTP request processing *)
+  let request =
+    { request_id= "req-abc-123"
+    ; user= alice
+    ; method_= POST
+    ; path= "/api/orders"
+    ; user_agent= Some "Mozilla/5.0" }
+  in
+
+  Log_context.with_property "RequestId" (`String request.request_id) (fun () ->
+      Log.debug "Processing HTTP request"
+        [("request", http_request_to_yojson request)];
 
       (* Simulate work *)
       Unix.sleepf 0.01;
 
-      let status_code = 201 in
-      let duration_ms = 15.5 in
-      [%log.information
-        "Request completed: status={status_code}, duration={duration_ms}ms"] );
+      (* Successful response *)
+      let success_response =
+        {status= Success; duration_ms= 45.3; bytes_sent= 1024}
+      in
 
-  (* Warning level *)
-  let threshold = 100 in
-  let current_value = 150 in
-  [%log.warning "Value {current_value} exceeds threshold {threshold}"];
+      Log.information "Request completed"
+        [ ("request", http_request_to_yojson request)
+        ; ("response", http_response_to_yojson success_response) ] );
 
-  (* Error level *)
-  let error_code = "DB_CONNECTION_TIMEOUT" in
-  let retry_count = 3 in
-  [%log.error
-    "Database connection failed: code={error_code}, retry={retry_count}"];
+  (* Simulate another request with error *)
+  let error_request =
+    { request_id= "req-def-456"
+    ; user= bob
+    ; method_= GET
+    ; path= "/api/users/99999"
+    ; user_agent= None }
+  in
 
-  (* Fatal level *)
-  let component = "payment-service" in
-  [%log.fatal "Critical failure in {component}"];
+  let error_response =
+    {status= ClientError 404; duration_ms= 12.5; bytes_sent= 0}
+  in
 
-  (* Multiple variables in one message *)
-  let ip_address = "192.168.1.1" in
-  let port = 8080 in
-  let protocol = "https" in
-  [%log.information "Connection from {ip_address}:{port} using {protocol}"];
+  Log.warning "Resource not found"
+    [ ("request", http_request_to_yojson error_request)
+    ; ("response", http_response_to_yojson error_response) ];
 
-  (* Application lifecycle *)
-  [%log.information "Application shutdown initiated"];
+  (* Simulate database error with server error response *)
+  let db_error_response =
+    {status= ServerError 500; duration_ms= 2500.0; bytes_sent= 0}
+  in
+
+  Log.error "Database connection timeout"
+    [ ("request_id", `String "req-ghi-789")
+    ; ("user", user_to_yojson alice)
+    ; ("response", http_response_to_yojson db_error_response)
+    ; ("retry_count", `Int 3) ];
+
+  (* Fatal error - critical system failure *)
+  Log.fatal "Payment service unavailable"
+    [ ("service", `String "payment-processor")
+    ; ("affected_users", `Int 2)
+    ; ("users", `List [user_to_yojson alice; user_to_yojson bob]) ];
+
+  (* Application shutdown *)
+  Log.information "Application shutdown initiated" [];
 
   (* Cleanup *)
   Log.close_and_flush ();
 
-  (* Display the output *)
-  print_endline "CLEF/JSON with PPX logging example completed!";
+  (* Display summary *)
+  print_endline "CLEF/JSON logging with deriving completed!";
   print_endline "";
   print_endline "Output file: output.clef.json";
   print_endline "";
-  print_endline "Sample output:";
+  print_endline "Sample CLEF events:";
   let ic = open_in "output.clef.json" in
   let lines = ref [] in
   ( try
@@ -92,11 +158,16 @@ let () =
       done
     with End_of_file -> () );
   close_in ic;
-  (* Show first 5 lines *)
+  (* Show first 5 lines formatted *)
   let all_lines = List.rev !lines in
   List.iteri
     (fun i line ->
-      if i < 5 then
-        print_endline ("  " ^ line) )
+      if i < 5 then (
+        print_endline ("  Event " ^ string_of_int (i + 1) ^ ":");
+        (* Pretty print the JSON *)
+        try
+          let json = Yojson.Safe.from_string line in
+          print_endline ("    " ^ Yojson.Safe.pretty_to_string json)
+        with _ -> print_endline ("    " ^ line) ) )
     all_lines
 ;;

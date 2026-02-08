@@ -1,4 +1,5 @@
-(** PPX logging example - demonstrates level-aware PPX extensions *)
+(** PPX logging example - demonstrates structured logging with explicit
+    converters *)
 
 open Message_templates
 
@@ -14,52 +15,70 @@ let () =
 
   Log.set_logger logger;
 
-  (* Use PPX extensions for cleaner syntax *)
+  (* Use Log module directly with explicit converters *)
 
   (* Verbose level - very detailed tracing *)
-  let trace_id = "trace-abc-123" in
-  [%log.verbose "Entering function with trace_id {trace_id}"];
+  let (trace_id : string) = "trace-abc-123" in
+  Log.verbose "Entering function with trace_id {trace_id}"
+    [("trace_id", Runtime_helpers.Converter.string trace_id)];
 
   (* Debug level - developer information *)
-  let config_value = 42 in
-  let debug_mode = true in
-  [%log.debug "Configuration: value={config_value}, debug={debug_mode}"];
+  let (config_value : int) = 42 in
+  let (debug_mode : bool) = true in
+  Log.debug "Configuration: value={config_value}, debug={debug_mode}"
+    [ ("config_value", Runtime_helpers.Converter.int config_value)
+    ; ("debug_mode", Runtime_helpers.Converter.bool debug_mode) ];
 
   (* Information level - normal operations *)
-  let user = "alice" in
-  let action = "login" in
-  [%log.information "User {user} performed {action}"];
+  let (user : string) = "alice" in
+  let (action : string) = "login" in
+  Log.information "User {user} performed {action}"
+    [ ("user", Runtime_helpers.Converter.string user)
+    ; ("action", Runtime_helpers.Converter.string action) ];
 
   (* Process some data *)
-  let items = ["item1"; "item2"; "item3"] in
-  let count = List.length items in
-  [%log.information "Processing {count} items"];
+  let (items : string list) = ["item1"; "item2"; "item3"] in
+  let (count : int) = List.length items in
+  Log.information "Processing {count} items"
+    [("count", Runtime_helpers.Converter.int count)];
 
-  List.iter (fun item -> [%log.debug "Processing item: {item}"]) items;
+  List.iter
+    (fun (item : string) ->
+      Log.debug "Processing item: {item}"
+        [("item", Runtime_helpers.Converter.string item)] )
+    items;
 
   (* Warning level - suspicious conditions *)
-  let threshold = 100 in
-  let current_value = 150 in
+  let (threshold : int) = 100 in
+  let (current_value : int) = 150 in
   if current_value > threshold then
-    [%log.warning "Value {current_value} exceeds threshold {threshold}"];
+    Log.warning "Value {current_value} exceeds threshold {threshold}"
+      [ ("current_value", Runtime_helpers.Converter.int current_value)
+      ; ("threshold", Runtime_helpers.Converter.int threshold) ];
 
   (* Error level - actual errors *)
-  let error_code = 500 in
-  let error_message = "Internal Server Error" in
-  [%log.error "Error {error_code}: {error_message}"];
+  let (error_code : int) = 500 in
+  let (error_message : string) = "Internal Server Error" in
+  Log.error "Error {error_code}: {error_message}"
+    [ ("error_code", Runtime_helpers.Converter.int error_code)
+    ; ("error_message", Runtime_helpers.Converter.string error_message) ];
 
   (* Fatal level - system failures *)
-  let critical_component = "database" in
-  [%log.fatal "Critical failure in {critical_component}"];
+  let (critical_component : string) = "database" in
+  Log.fatal "Critical failure in {critical_component}"
+    [("critical_component", Runtime_helpers.Converter.string critical_component)];
 
   (* Multiple variables in one message *)
-  let ip_address = "192.168.1.1" in
-  let port = 8080 in
-  let protocol = "https" in
-  [%log.information "Connection from {ip_address}:{port} using {protocol}"];
+  let (ip_address : string) = "192.168.1.1" in
+  let (port : int) = 8080 in
+  let (protocol : string) = "https" in
+  Log.information "Connection from {ip_address}:{port} using {protocol}"
+    [ ("ip_address", Runtime_helpers.Converter.string ip_address)
+    ; ("port", Runtime_helpers.Converter.int port)
+    ; ("protocol", Runtime_helpers.Converter.string protocol) ];
 
   (* Static message without variables *)
-  [%log.information "Application shutdown initiated"];
+  Log.information "Application shutdown initiated" [];
 
   (* Cleanup *)
   Log.close_and_flush ();

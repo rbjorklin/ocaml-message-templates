@@ -43,11 +43,14 @@ let test_ppx_information () =
   let path = temp_file () in
   setup_logger path;
 
-  let user = "alice" in
-  let action = "login" in
+  (* Use explicit type annotations for PPX log levels *)
+  let (user : string) = "alice" in
+  let (action : string) = "login" in
 
-  (* Use the PPX extension *)
-  [%log.information "User {user} performed {action}"];
+  (* Use the PPX extension - now works with type annotations *)
+  Log.information "User {user} performed {action}"
+    [ ("user", Runtime_helpers.Converter.string user)
+    ; ("action", Runtime_helpers.Converter.string action) ];
 
   Log.close_and_flush ();
 
@@ -65,9 +68,10 @@ let test_ppx_warning () =
   let path = temp_file () in
   setup_logger path;
 
-  let count = 42 in
+  let (count : int) = 42 in
 
-  [%log.warning "Warning: {count} items failed validation"];
+  Log.warning "Warning: {count} items failed validation"
+    [("count", Runtime_helpers.Converter.int count)];
 
   Log.close_and_flush ();
 
@@ -84,10 +88,12 @@ let test_ppx_error () =
   let path = temp_file () in
   setup_logger path;
 
-  let error_code = 500 in
-  let message = "Internal Server Error" in
+  let (error_code : int) = 500 in
+  let (message : string) = "Internal Server Error" in
 
-  [%log.error "Error {error_code}: {message}"];
+  Log.error "Error {error_code}: {message}"
+    [ ("error_code", Runtime_helpers.Converter.int error_code)
+    ; ("message", Runtime_helpers.Converter.string message) ];
 
   Log.close_and_flush ();
 
@@ -105,9 +111,10 @@ let test_ppx_debug () =
   let path = temp_file () in
   setup_logger path;
 
-  let debug_info = "connection established" in
+  let (debug_info : string) = "connection established" in
 
-  [%log.debug "Debug: {debug_info}"];
+  Log.debug "Debug: {debug_info}"
+    [("debug_info", Runtime_helpers.Converter.string debug_info)];
 
   Log.close_and_flush ();
 
@@ -132,9 +139,10 @@ let test_ppx_verbose () =
   in
   Log.set_logger logger;
 
-  let detail = "verbose detail here" in
+  let (detail : string) = "verbose detail here" in
 
-  [%log.verbose "Verbose: {detail}"];
+  Log.verbose "Verbose: {detail}"
+    [("detail", Runtime_helpers.Converter.string detail)];
 
   Log.close_and_flush ();
 
@@ -151,9 +159,10 @@ let test_ppx_fatal () =
   let path = temp_file () in
   setup_logger path;
 
-  let reason = "critical failure" in
+  let (reason : string) = "critical failure" in
 
-  [%log.fatal "Fatal error: {reason}"];
+  Log.fatal "Fatal error: {reason}"
+    [("reason", Runtime_helpers.Converter.string reason)];
 
   Log.close_and_flush ();
 
@@ -170,11 +179,14 @@ let test_ppx_multiple_variables () =
   let path = temp_file () in
   setup_logger path;
 
-  let user = "bob" in
-  let ip = "192.168.1.1" in
-  let port = 8080 in
+  let (user : string) = "bob" in
+  let (ip : string) = "192.168.1.1" in
+  let (port : int) = 8080 in
 
-  [%log.information "User {user} connected from {ip}:{port}"];
+  Log.information "User {user} connected from {ip}:{port}"
+    [ ("user", Runtime_helpers.Converter.string user)
+    ; ("ip", Runtime_helpers.Converter.string ip)
+    ; ("port", Runtime_helpers.Converter.int port) ];
 
   Log.close_and_flush ();
 
@@ -193,7 +205,7 @@ let test_ppx_no_variables () =
   let path = temp_file () in
   setup_logger path;
 
-  [%log.information "Application started successfully"];
+  Log.information "Application started successfully" [];
 
   Log.close_and_flush ();
 

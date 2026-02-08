@@ -1,182 +1,84 @@
-(** Comprehensive type coverage tests for Message Templates *)
+(** Comprehensive type coverage tests for Message Templates
+
+    NOTE: These tests previously relied on Obj module for runtime type
+    inspection. With the migration to type-safe conversions, complex types now
+    require explicit converters. This test file is kept for documentation
+    purposes but most tests have been removed.
+
+    For type-safe logging of custom types: 1. Define a converter: let
+    my_type_to_json x = `Assoc [...] 2. Use the Log module directly: Log.info
+    "msg" [("key", my_type_to_json value)] *)
 
 open Alcotest
 
-(** Test Bytes type *)
-let test_bytes () =
-  let bs : bytes = Bytes.of_string "hello" in
-  let msg, _ = [%template "Bytes: {$bs}"] in
-  Printf.printf "%s%!" msg;
-  (* Bytes should be converted to string representation *)
-  check bool "Message contains bytes" true
-    (String.contains msg 'h' || String.contains msg '<')
+(** Test basic primitive types still work with explicit annotations *)
+let test_primitives () =
+  let (s : string) = "hello" in
+  let (n : int) = 42 in
+  let (f : float) = 3.14 in
+  let (b : bool) = true in
+
+  (* Use Converter module for explicit conversions *)
+  let json_s = Message_templates.Runtime_helpers.Converter.string s in
+  let json_n = Message_templates.Runtime_helpers.Converter.int n in
+  let json_f = Message_templates.Runtime_helpers.Converter.float f in
+  let json_b = Message_templates.Runtime_helpers.Converter.bool b in
+
+  check bool "String converter works" true
+    ( match json_s with
+    | `String "hello" -> true
+    | _ -> false );
+  check bool "Int converter works" true
+    ( match json_n with
+    | `Int 42 -> true
+    | _ -> false );
+  check bool "Float converter works" true
+    ( match json_f with
+    | `Float 3.14 -> true
+    | _ -> false );
+  check bool "Bool converter works" true
+    ( match json_b with
+    | `Bool true -> true
+    | _ -> false )
 ;;
 
-(** Test Reference type *)
-let test_ref () =
-  let r : int ref = ref 42 in
-  let msg, _ = [%template "Ref: {$r}"] in
-  Printf.printf "%s%!" msg;
-  (* Ref should show the contents or a representation *)
-  check bool "Message contains ref value" true
-    (String.contains msg '4' || String.contains msg '<')
-;;
+(** Test Converter module with containers *)
+let test_converter_containers () =
+  let int_list = [1; 2; 3] in
+  let int_array = [|1; 2; 3|] in
+  let string_opt = Some "test" in
 
-(** Test Lazy type *)
-let test_lazy () =
-  let lz : int lazy_t = lazy 42 in
-  let msg, _ = [%template "Lazy: {$lz}"] in
-  Printf.printf "%s%!" msg;
-  (* Lazy values are forced and show the underlying value *)
-  check bool "Message contains lazy value" true (String.contains msg '4')
-;;
-
-(** Test 4-tuple (quad) *)
-let test_quad () =
-  let quad : int * string * float * bool = (1, "a", 3.14, true) in
-  let msg, _ = [%template "Quad: {$quad}"] in
-  Printf.printf "%s%!" msg;
-  (* Should contain the tuple elements *)
-  check bool "Message contains quad elements" true
-    (String.contains msg '1' || String.contains msg '<')
-;;
-
-(** Test Set *)
-let test_set () =
-  let module StringSet = Set.Make (String) in
-  let s = StringSet.of_list ["a"; "b"; "c"] in
-  let msg, _ = [%template "Set: {$s}"] in
-  Printf.printf "%s%!" msg;
-  (* Set should show its contents as a list *)
-  check bool "Message contains set elements" true (String.contains msg '[')
-;;
-
-(** Test Map *)
-let test_map () =
-  let module StringMap = Map.Make (String) in
-  let map = StringMap.empty in
-  let map = StringMap.add "key1" 100 map in
-  let map = StringMap.add "key2" 200 map in
-  let map = StringMap.add "key3" 300 map in
-  let msg, _ = [%template "Map: {$map}"] in
-  Printf.printf "%s%!" msg;
-  (* Map should show its contents as a list *)
-  check bool "Message contains map elements" true (String.contains msg '[')
-;;
-
-(** Test Queue *)
-let test_queue () =
-  let q = Queue.create () in
-  Queue.add 1 q;
-  Queue.add 2 q;
-  let msg, _ = [%template "Queue: {$q}"] in
-  Printf.printf "%s%!" msg;
-  (* Queue should show its contents *)
-  check bool "Message contains queue elements" true
-    (String.contains msg '1' || String.contains msg '<')
-;;
-
-(** Test Stack *)
-let test_stack () =
-  let s = Stack.create () in
-  Stack.push 1 s;
-  Stack.push 2 s;
-  let msg, _ = [%template "Stack: {$s}"] in
-  Printf.printf "%s%!" msg;
-  (* Stack should show its contents *)
-  check bool "Message contains stack elements" true
-    (String.contains msg '1' || String.contains msg '<')
-;;
-
-(** Test custom record type *)
-type my_record =
-  { name: string
-  ; value: int }
-
-let test_record () =
-  let r : my_record = {name= "test"; value= 42} in
-  let msg, _ = [%template "Record: {$r}"] in
-  Printf.printf "%s%!" msg;
-  (* Record should show its fields *)
-  check bool "Message contains record fields" true
-    (String.contains msg 't' || String.contains msg '<')
-;;
-
-(** Test custom variant type *)
-type my_variant =
-  | A
-  | B of int
-  | C of string * int
-
-let test_variant () =
-  let v1 : my_variant = A in
-  let v2 : my_variant = B 42 in
-  let v3 : my_variant = C ("test", 100) in
-  let msg, _ = [%template "Variants: {$v1}, {$v2}, {$v3}"] in
-  Printf.printf "%s%!" msg;
-  (* Variants should show their values in human-friendly format *)
-  check bool "Message contains variant values" true
-    (String.contains msg '4' && String.contains msg 't')
-;;
-
-(** Test polymorphic variant *)
-let test_poly_variant () =
-  let pv : [`A | `B of int] = `B 42 in
-  let msg, _ = [%template "Poly variant: {$pv}"] in
-  Printf.printf "%s%!" msg;
-  (* Polymorphic variants show as a list with the tag code *)
-  check bool "Message contains poly variant list" true (String.contains msg '[')
-;;
-
-(** Test closure *)
-let test_closure () =
-  let f x = x + 1 in
-  let msg, _ = [%template "Closure: {$f}"] in
-  Printf.printf "%s%!" msg;
-  (* Closures should show as <closure> *)
-  check bool "Message contains closure marker" true (String.contains msg '<')
-;;
-
-(** Test flat float array *)
-let test_flat_float_array () =
-  let arr = [|1.0; 2.0; 3.0|] in
-  let msg, _ = [%template "Float array: {$arr}"] in
-  Printf.printf "%s%!" msg;
-  (* Float arrays should show the values *)
-  check bool "Message contains float values" true
-    (String.contains msg '1' || String.contains msg '<')
-;;
-
-(** Test object *)
-let test_object () =
-  let obj =
-    object
-      val x = 42
-
-      method get_x = x
-    end
+  let json_list =
+    Message_templates.Runtime_helpers.Converter.list
+      Message_templates.Runtime_helpers.Converter.int int_list
   in
-  let msg, _ = [%template "Object: {$obj}"] in
-  Printf.printf "%s%!" msg;
-  (* Objects should show as <object> or their contents *)
-  check bool "Message contains object marker" true (String.contains msg '<')
+  let json_array =
+    Message_templates.Runtime_helpers.Converter.array
+      Message_templates.Runtime_helpers.Converter.int int_array
+  in
+  let json_opt =
+    Message_templates.Runtime_helpers.Converter.option
+      Message_templates.Runtime_helpers.Converter.string string_opt
+  in
+
+  check bool "List converter works" true
+    ( match json_list with
+    | `List [`Int 1; `Int 2; `Int 3] -> true
+    | _ -> false );
+  check bool "Array converter works" true
+    ( match json_array with
+    | `List [`Int 1; `Int 2; `Int 3] -> true
+    | _ -> false );
+  check bool "Option converter works" true
+    ( match json_opt with
+    | `String "test" -> true
+    | _ -> false )
 ;;
 
 let () =
   run "Type Coverage Tests"
-    [ ( "uncovered_types"
-      , [ test_case "Bytes type" `Quick test_bytes
-        ; test_case "Reference type" `Quick test_ref
-        ; test_case "Lazy type" `Quick test_lazy
-        ; test_case "4-tuple" `Quick test_quad
-        ; test_case "Set type" `Quick test_set
-        ; test_case "Map type" `Quick test_map
-        ; test_case "Queue type" `Quick test_queue
-        ; test_case "Stack type" `Quick test_stack
-        ; test_case "Custom record" `Quick test_record
-        ; test_case "Custom variant" `Quick test_variant
-        ; test_case "Polymorphic variant" `Quick test_poly_variant
-        ; test_case "Closure" `Quick test_closure
-        ; test_case "Flat float array" `Quick test_flat_float_array
-        ; test_case "Object" `Quick test_object ] ) ]
+    [ ( "converter_module"
+      , [ test_case "Primitive converters" `Quick test_primitives
+        ; test_case "Container converters" `Quick test_converter_containers ] )
+    ]
 ;;

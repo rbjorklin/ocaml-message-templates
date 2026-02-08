@@ -6,18 +6,22 @@
   (pps message-templates-ppx)))
 
 (executables
- (names
-  logging_basic
-  logging_advanced
-  logging_ppx
-  logging_clef_json
-  logging_clef_ppx)
- (modules
-  logging_basic
-  logging_advanced
-  logging_ppx
-  logging_clef_json
-  logging_clef_ppx)
+ (names logging_basic logging_advanced logging_ppx logging_clef_json)
+ (modules logging_basic logging_advanced logging_ppx logging_clef_json)
  (libraries message-templates message-templates-ppx yojson unix)
  (preprocess
   (pps message-templates-ppx)))
+
+(executable
+ (name logging_deriving)
+ (modules logging_deriving)
+ (libraries message-templates yojson unix)
+ (preprocess
+  (pps ppx_deriving_yojson message-templates-ppx)))
+
+(executable
+ (name logging_clef_ppx)
+ (modules logging_clef_ppx)
+ (libraries message-templates yojson unix)
+ (preprocess
+  (pps ppx_deriving_yojson message-templates-ppx)))

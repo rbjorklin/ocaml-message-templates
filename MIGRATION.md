@@ -250,6 +250,150 @@ let colors = match Sys.getenv_opt "NO_COLOR" with Some _ -> false | None -> Unix
 Configuration.create () |> Configuration.write_to_console ~colors () |> Configuration.build
 ```
 
+## Migrating from Obj-Based Converters (v1.x to v2.0)
+
+If you were using `generic_to_string` or `generic_to_json` functions, these have been deprecated in favor of the type-safe `Converter` module.
+
+### Before (v1.x):
+```ocaml
+let user = { id = 42; name = "Alice" }
+[%log.information "User {$user}"]
+(* Used Obj module for runtime type inspection *)
+```
+
+### After (v2.0):
+```ocaml
+(* Define a converter for your type *)
+type user = { id : int; name : string }
+
+let user_to_json u =
+  `Assoc [("id", `Int u.id); ("name", `String u.name)]
+
+(* Use it explicitly *)
+let user = { id = 42; name = "Alice" }
+Log.information "User {user}" [("user", user_to_json user)]
+```
+
+### Using the Converter Module
+
+For primitive and container types, use the `Runtime_helpers.Converter` module:
+
+```ocaml
+open Message_templates.Runtime_helpers.Converter
+
+(* Primitives *)
+let json_string = string "hello"  (* `String "hello" *)
+let json_int = int 42             (* `Int 42 *)
+let json_float = float 3.14       (* `Float 3.14 *)
+
+(* Containers *)
+let json_list = list int [1; 2; 3]  (* `List [`Int 1; `Int 2; `Int 3] *)
+let json_opt = option string (Some "x")  (* `String "x" *)
+```
+
+### Quick Reference
+
+| Type | Converter |
+|------|-----------|
+| `string` | `Converter.string` |
+| `int` | `Converter.int` |
+| `float` | `Converter.float` |
+| `bool` | `Converter.bool` |
+| `int64` | `Converter.int64` |
+| `int32` | `Converter.int32` |
+| `char` | `Converter.char` |
+| `unit` | `Converter.unit` |
+| `'a list` | `Converter.list <elem_conv>` |
+| `'a array` | `Converter.array <elem_conv>` |
+| `'a option` | `Converter.option <elem_conv>` |
+| `'a * 'b` | `Converter.pair <a_conv> <b_conv>` |
+
+### Convention-Based Converter Lookup
+
+The PPX automatically looks for converters following the naming convention `<type>_to_json` or `<type>_to_yojson`:
+
+```ocaml
+type user = { id : int; name : string }
+
+(* Define a converter following the convention *)
+let user_to_json u =
+  `Assoc [("id", `Int u.id); ("name", `String u.name)]
+
+(* The PPX will automatically find and use user_to_json *)
+let (u : user) = { id = 42; name = "Alice" }
+let msg, json = [%template "User: {u}"]
+```
+
+This works with:
+- Manual converters: `let my_type_to_json t = ...`
+- ppx_deriving_yojson: generates `my_type_to_yojson` automatically
+- ppx_deriving.show: generates `my_type_to_string` for stringify operator
+
+### Custom Types
+
+For custom types, you have three options:
+
+**Option 1: Manual converter (simplest)**
+```ocaml
+type point = { x : float; y : float }
+
+let point_to_json p =
+  `Assoc [("x", `Float p.x); ("y", `Float p.y)]
+
+(* Use with Log module *)
+let p = { x = 1.0; y = 2.0 } in
+Log.debug "Point" [("point", point_to_json p)]
+```
+
+**Option 2: Use ppx_deriving_yojson (recommended for many types)**
+
+Add to your `dune` file:
+```dune
+(preprocess (pps ppx_deriving_yojson))
+```
+
+Then derive converters automatically:
+```ocaml
+type user = {
+  id : int;
+  name : string;
+  email : string;
+} [@@deriving yojson]
+(* Generates: user_to_yojson and user_of_yojson *)
+
+let user = { id = 1; name = "Alice"; email = "alice@example.com" } in
+Log.information "User created" [("user", user_to_yojson user)]
+```
+
+**Option 3: Use ppx_deriving_yojson with variants and nested types**
+```ocaml
+type status = 
+  | Active
+  | Inactive of string
+[@@deriving yojson]
+
+type request = {
+  id : int;
+  status : status;
+  user : user;
+} [@@deriving yojson]
+
+let req = { id = 1; status = Inactive "timeout"; user } in
+Log.debug "Request" [("request", request_to_yojson req)]
+```
+
+### PPX with Type Annotations
+
+When using the `[%template]` PPX extension, add explicit type annotations:
+
+```ocaml
+let (name : string) = "Alice"
+let (age : int) = 30
+let msg, json = [%template "{name} is {age} years old"]
+```
+
+Without type annotations, the PPX cannot determine the type for generating the converter.
+
 ## See Also
 
 - `CONFIGURATION.md` - Configuration guide

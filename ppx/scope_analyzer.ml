@@ -28,6 +28,16 @@ let rec find_variable scope var_name =
     | outer :: _ -> find_variable outer var_name )
 ;;
 
+(** Check if a converter exists in scope based on naming convention *)
+let rec has_binding scope name =
+  match List.assoc_opt name scope.bindings with
+  | Some _ -> true
+  | None -> (
+    match scope.outer_scopes with
+    | [] -> false
+    | outer :: _ -> has_binding outer name )
+;;
+
 (** Get all variable names in scope *)
 let rec get_all_variables scope =
   let current = List.map fst scope.bindings in
@@ -84,31 +94,133 @@ let validate_variable ~loc scope var_name =
   | ty -> ty
 ;;
 
-(** Extract variable names from a pattern *)
-let rec extract_pattern_names pat =
-  match pat.ppat_desc with
-  | Ppat_var {txt= name; _} -> [name]
-  | Ppat_tuple pats -> List.concat_map extract_pattern_names pats
-  | Ppat_record (fields, _) ->
-      List.map (fun (_, pat) -> extract_pattern_names pat) fields |> List.concat
-  | Ppat_alias (pat, {txt= name; _}) -> name :: extract_pattern_names pat
-  | _ -> []
+(** Infer type from a literal expression *)
+let type_of_literal_expr expr =
+  let make_type desc =
+    { ptyp_desc= desc
+    ; ptyp_loc= expr.pexp_loc
+    ; ptyp_attributes= []
+    ; ptyp_loc_stack= [] }
+  in
+  let make_type_var () =
+    { ptyp_desc= Ptyp_var "_"
+    ; ptyp_loc= expr.pexp_loc
+    ; ptyp_attributes= []
+    ; ptyp_loc_stack= [] }
+  in
+  match expr.pexp_desc with
+  | Pexp_constant (Pconst_string _) ->
+      Some
+        (make_type
+           (Ptyp_constr ({txt= Lident "string"; loc= expr.pexp_loc}, [])) )
+  | Pexp_constant (Pconst_integer _) ->
+      Some
+        (make_type (Ptyp_constr ({txt= Lident "int"; loc= expr.pexp_loc}, [])))
+  | Pexp_constant (Pconst_float _) ->
+      Some
+        (make_type
+           (Ptyp_constr ({txt= Lident "float"; loc= expr.pexp_loc}, [])) )
+  | Pexp_construct ({txt= Lident "true" | Lident "false"; _}, None) ->
+      Some
+        (make_type (Ptyp_constr ({txt= Lident "bool"; loc= expr.pexp_loc}, [])))
+  | Pexp_construct ({txt= Lident "()"; _}, None) ->
+      Some
+        (make_type (Ptyp_constr ({txt= Lident "unit"; loc= expr.pexp_loc}, [])))
+  | Pexp_construct ({txt= Lident "[]"; _}, None) ->
+      (* Empty list - element type is unknown, but we know it's a list *)
+      Some
+        (make_type
+           (Ptyp_constr
+              ({txt= Lident "list"; loc= expr.pexp_loc}, [make_type_var ()]) ) )
+  | _ -> None
 ;;
 
-(** Build scope from let bindings *)
+(** Extract variable names and their types from a pattern *)
+let rec extract_pattern_names_with_types pat =
+  match pat.ppat_desc with
+  | Ppat_var {txt= name; _} ->
+      (* Check if there's a type annotation on the pattern *)
+      let ty_opt =
+        match pat.ppat_attributes with
+        | [ { attr_name= {txt= "ocaml.typ"; _}
+            ; attr_payload= PStr [{pstr_desc= Pstr_eval (expr, _); _}]
+            ; _ } ] ->
+            (* Try to extract type from attribute - this is complex, skip for
+               now *)
+            None
+        | _ -> None
+      in
+      [(name, ty_opt)]
+  | Ppat_constraint (inner_pat, ty) ->
+      (* Pattern with type annotation: (x : int) *)
+      let names = extract_pattern_names inner_pat in
+      List.map (fun name -> (name, Some ty)) names
+  | Ppat_tuple pats -> List.concat_map extract_pattern_names_with_types pats
+  | Ppat_record (fields, _) ->
+      List.concat_map
+        (fun (_, pat) -> extract_pattern_names_with_types pat)
+        fields
+  | Ppat_alias (pat, {txt= name; _}) ->
+      let inner = extract_pattern_names_with_types pat in
+      (name, None) :: inner
+  | _ -> []
+
+(** Extract variable names from a pattern (legacy, type-less) *)
+and extract_pattern_names pat =
+  List.map fst (extract_pattern_names_with_types pat)
+;;
+
+(** Build scope from let bindings with type information *)
 let scope_from_let_bindings vbs =
   List.fold_left
     (fun scope vb ->
-      let names = extract_pattern_names vb.pvb_pat in
-      (* Type information not available at PPX stage, so we store None *)
-      List.fold_left (fun sc name -> add_binding name None sc) scope names )
+      (* Check for type constraint on the pattern itself *)
+      let pat_types = extract_pattern_names_with_types vb.pvb_pat in
+      (* Check for type annotation on the expression: let x : int = 42 *)
+      (* Also infer type from literal expressions: let x = "hello" *)
+      let expr_type =
+        match vb.pvb_expr.pexp_desc with
+        | Pexp_constraint (_, ty) -> Some ty
+        | Pexp_coerce (_, _, ty) -> Some ty
+        | _ ->
+            (* Try to infer from literal *)
+            type_of_literal_expr vb.pvb_expr
+      in
+      List.fold_left
+        (fun sc (name, pat_ty) ->
+          (* Use pattern type if available, otherwise use expression type *)
+          let final_ty =
+            match pat_ty with
+            | Some _ -> pat_ty
+            | None -> expr_type
+          in
+          add_binding name final_ty sc )
+        scope pat_types )
     empty_scope vbs
 ;;
 
-(** Build scope from function parameters *)
+(** Build scope from function parameters with type information *)
 let scope_from_params pat =
-  let names = extract_pattern_names pat in
+  let bindings = extract_pattern_names_with_types pat in
   List.fold_left
-    (fun scope name -> add_binding name None scope)
-    empty_scope names
+    (fun scope (name, ty_opt) -> add_binding name ty_opt scope)
+    empty_scope bindings
+;;
+
+(** Extract type name from a core_type *)
+let extract_type_name (ty : core_type) : string option =
+  match ty.ptyp_desc with
+  | Ptyp_constr ({txt= Lident name; _}, []) -> Some name
+  | Ptyp_constr ({txt= Ldot (_, name); _}, []) -> Some name
+  | _ -> None
+;;
+
+(** Generate convention-based converter name for a type *)
+let converter_name_for_type (ty : core_type) : string option =
+  extract_type_name ty |> Option.map (fun name -> name ^ "_to_json")
+;;
+
+(** Generate convention-based stringifier name for a type *)
+let stringifier_name_for_type (ty : core_type) : string option =
+  extract_type_name ty |> Option.map (fun name -> name ^ "_to_string")
 ;;
