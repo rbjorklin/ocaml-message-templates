@@ -24,3 +24,28 @@
 - `generic_to_string` and `generic_to_json` required despite Obj module usage
 - PPX generates calls to these for unknown types at compile time
 - Cannot fully remove Obj usage without breaking template fallback for complex types
+
+## OCaml Runtime Representation
+
+### Obj Tag Values (246-255)
+Per [OCamlverse runtime docs](https://ocamlverse.net/content/runtime.html):
+- 246: Lazy (unevaluated), 250: Forward (evaluated lazy - dereference field 0)
+- 247: Closure, 248: Object, 249: Infix
+- 251: Abstract (not scanned by GC)
+- 252: String, 253: Float, 254: Flat float array, 255: Custom
+
+### Set/Map Internal Structure
+- Set.Make: AVL tree with 4 fields (left, value, right, height)
+- Map.Make: AVL tree with 5 fields (left, key, data, right, height)
+- Empty nodes represented as integer 0 (tag check in try_traverse_set_tree)
+- Detection heuristic: block with tag 0 and size 4 or 5
+
+### List Representation
+- Empty list `[]` is integer 0 (same as Empty constructor)
+- Non-empty list is block with tag 0, size 2 (head, tail)
+- Must check size=2 to distinguish from tuple/record with tag 0
+
+### Block Output Format
+- Tag 0 blocks with fields shown as `(field1, field2, ...)`
+- Empty blocks shown as `()`
+- Non-zero tag blocks shown as `<tag:N|field1; field2>` (before stripping)

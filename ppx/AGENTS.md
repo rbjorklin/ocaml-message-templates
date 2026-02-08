@@ -12,6 +12,11 @@
 2. Falls back to Runtime_helpers.generic_to_json for unknown types
 3. Obj module runtime inspection used only as last resort
 
+### Stringify Operator Code Path
+- `{$var}` generates call to `Runtime_helpers.generic_to_string` (not `generic_to_json`)
+- Stringify ALWAYS uses Obj fallback since it's for display, not JSON
+- Use explicit type annotations to avoid Obj overhead: `(var : int list)` instead of `$var`
+
 ### Build Dependencies
 - PPX must be built before test files that use `[%template]` or `[%log.*]` extensions
 - `dune build @install` builds PPX first, then tests

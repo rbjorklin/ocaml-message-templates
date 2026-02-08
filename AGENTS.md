@@ -246,6 +246,12 @@ When removing a module, update these locations:
 - Isolate Obj usage to `generic_to_string`/`generic_to_json` functions only
 - Document Obj dependency clearly for future maintainers
 
+### Stringify Operator Behavior
+- `{$var}` (Stringify operator) uses `generic_to_string` when type unknown at compile time
+- Lists display as `[elem1; elem2; ...]` via recursive Obj inspection
+- Sets/Maps detected by AVL tree structure and displayed as `[elem1; elem2]` / `[(k1, v1); ...]`
+- Deeply nested structures (large Sets/Maps) have O(n) traversal cost - acceptable for logging only
+
 ### Synchronization Points
 These files must change together:
 - `lib/runtime_helpers.ml` ↔ `ppx/code_generator.ml` ↔ `ppx/ppx_log_levels.ml`

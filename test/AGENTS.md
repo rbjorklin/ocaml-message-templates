@@ -16,3 +16,15 @@
 - PPX tests (`test_ppx_*.ml`) generate code referencing Runtime_helpers
 - Changing Runtime_helpers function names breaks PPX tests even if core tests pass
 - Must update BOTH `ppx/code_generator.ml` AND test assertions together
+
+## Debugging Test Output
+
+### Test Output Locations
+- Alcotest output files: `_build/_tests/latest/` or `_build/default/test/_build/_tests/<TestName>/`
+- Files named `<test_suite>.<index>.output` (e.g., `uncovered_types.004.output`)
+- Use `cat _build/_tests/latest/*.output` to see recent test results
+
+### Adding Debug Output to Tests
+- Use `Printf.printf "%s%!" msg` (with `%!` to flush) to see values during test runs
+- Output appears in test output files, not stdout
+- Remove debug prints before committing
