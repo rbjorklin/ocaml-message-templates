@@ -12,12 +12,13 @@ let () =
     { Composite_sink.emit_fn=
         (fun event -> Json_sink.emit json_sink_instance event)
     ; flush_fn= (fun () -> Json_sink.flush json_sink_instance)
-    ; close_fn= (fun () -> Json_sink.close json_sink_instance)
-    ; min_level= None }
+    ; close_fn= (fun () -> Json_sink.close json_sink_instance) }
   in
 
   (* Configure the logger with JSON output *)
-  let logger = Logger.create ~min_level:Level.Debug ~sinks:[json_sink] in
+  let logger =
+    Logger.create ~min_level:Level.Debug ~sinks:[(json_sink, None)]
+  in
 
   Log.set_logger logger;
 

@@ -50,7 +50,7 @@ end
 (** Logger implementation type *)
 type logger_impl =
   { min_level: Level.t
-  ; sinks: Composite_sink.sink_fn list
+  ; sinks: (Composite_sink.sink_fn * Level.t option) list
   ; enrichers: (Log_event.t -> Log_event.t) list
   ; filters: (Log_event.t -> bool) list
   ; context_properties: (string * Yojson.Safe.t) list
@@ -120,8 +120,13 @@ let write t ?exn level message_template properties =
     if not (passes_filters t event) then
       ()
     else
-      (* Emit to all sinks *)
-      List.iter (fun sink -> sink.Composite_sink.emit_fn event) t.sinks
+      (* Emit to all sinks with per-sink level filtering *)
+      List.iter
+        (fun (sink_fn, min_level) ->
+          match min_level with
+          | Some min_lvl when Level.compare level min_lvl < 0 -> ()
+          | _ -> sink_fn.Composite_sink.emit_fn event )
+        t.sinks
 ;;
 
 (** Level-specific convenience methods *)
@@ -183,7 +188,11 @@ let add_min_level_filter t min_level =
 let add_filter t filter = {t with filters= filter :: t.filters}
 
 (** Flush all sinks *)
-let flush t = List.iter (fun sink -> sink.Composite_sink.flush_fn ()) t.sinks
+let flush t =
+  List.iter (fun (sink_fn, _) -> sink_fn.Composite_sink.flush_fn ()) t.sinks
+;;
 
 (** Close all sinks *)
-let close t = List.iter (fun sink -> sink.Composite_sink.close_fn ()) t.sinks
+let close t =
+  List.iter (fun (sink_fn, _) -> sink_fn.Composite_sink.close_fn ()) t.sinks
+;;

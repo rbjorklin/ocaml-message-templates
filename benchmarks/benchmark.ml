@@ -98,20 +98,17 @@ let composite_sink_emit () =
   let sink1 =
     { Composite_sink.emit_fn= (fun _ -> ())
     ; flush_fn= (fun () -> ())
-    ; close_fn= (fun () -> ())
-    ; min_level= None }
+    ; close_fn= (fun () -> ()) }
   in
   let sink2 =
     { Composite_sink.emit_fn= (fun _ -> ())
     ; flush_fn= (fun () -> ())
-    ; close_fn= (fun () -> ())
-    ; min_level= None }
+    ; close_fn= (fun () -> ()) }
   in
   let sink3 =
     { Composite_sink.emit_fn= (fun _ -> ())
     ; flush_fn= (fun () -> ())
-    ; close_fn= (fun () -> ())
-    ; min_level= None }
+    ; close_fn= (fun () -> ()) }
   in
   let composite = Composite_sink.create [sink1; sink2; sink3] in
   let event =

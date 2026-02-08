@@ -9,8 +9,7 @@ let create_file_sink_fn path =
   let sink = File_sink.create path in
   { Composite_sink.emit_fn= (fun event -> File_sink.emit sink event)
   ; flush_fn= (fun () -> File_sink.flush sink)
-  ; close_fn= (fun () -> File_sink.close sink)
-  ; min_level= None }
+  ; close_fn= (fun () -> File_sink.close sink) }
 ;;
 
 let read_file path =
@@ -40,7 +39,7 @@ let contains substr str =
 let test_logger_level_filtering () =
   let path = temp_file () in
   let sink = create_file_sink_fn path in
-  let logger = Logger.create ~min_level:Level.Warning ~sinks:[sink] in
+  let logger = Logger.create ~min_level:Level.Warning ~sinks:[(sink, None)] in
 
   (* These should NOT be logged (below Warning) *)
   Logger.verbose logger "Verbose message" [];
@@ -75,8 +74,12 @@ let test_logger_is_enabled () =
   let path = temp_file () in
   let sink = create_file_sink_fn path in
 
-  let info_logger = Logger.create ~min_level:Level.Information ~sinks:[sink] in
-  let error_logger = Logger.create ~min_level:Level.Error ~sinks:[sink] in
+  let info_logger =
+    Logger.create ~min_level:Level.Information ~sinks:[(sink, None)]
+  in
+  let error_logger =
+    Logger.create ~min_level:Level.Error ~sinks:[(sink, None)]
+  in
 
   (* Info logger should have Debug disabled, Information enabled *)
   check bool "Debug disabled for Info logger" false
@@ -101,7 +104,9 @@ let test_logger_is_enabled () =
 let test_logger_context () =
   let path = temp_file () in
   let sink = create_file_sink_fn path in
-  let logger = Logger.create ~min_level:Level.Information ~sinks:[sink] in
+  let logger =
+    Logger.create ~min_level:Level.Information ~sinks:[(sink, None)]
+  in
 
   (* Create contextual logger with RequestId *)
   let ctx_logger = Logger.for_context logger "RequestId" (`String "abc-123") in
@@ -124,7 +129,7 @@ let test_logger_context () =
 let test_logger_write_with_exception () =
   let path = temp_file () in
   let sink = create_file_sink_fn path in
-  let logger = Logger.create ~min_level:Level.Error ~sinks:[sink] in
+  let logger = Logger.create ~min_level:Level.Error ~sinks:[(sink, None)] in
 
   (* Create an exception *)
   let exn = Failure "Test exception" in
@@ -151,7 +156,8 @@ let test_logger_multiple_sinks () =
   let sink2 = create_file_sink_fn path2 in
 
   let logger =
-    Logger.create ~min_level:Level.Information ~sinks:[sink1; sink2]
+    Logger.create ~min_level:Level.Information
+      ~sinks:[(sink1, None); (sink2, None)]
   in
 
   Logger.information logger "Multi-sink test" [];
@@ -175,7 +181,7 @@ let test_logger_add_min_level_filter () =
   let sink = create_file_sink_fn path in
 
   (* Start with Debug level, but add a Warning filter *)
-  let logger = Logger.create ~min_level:Level.Debug ~sinks:[sink] in
+  let logger = Logger.create ~min_level:Level.Debug ~sinks:[(sink, None)] in
   let filtered_logger = Logger.add_min_level_filter logger Level.Warning in
 
   (* These should NOT be logged due to the additional filter *)
@@ -200,7 +206,9 @@ let test_logger_add_min_level_filter () =
 let test_logger_enricher () =
   let path = temp_file () in
   let sink = create_file_sink_fn path in
-  let logger = Logger.create ~min_level:Level.Information ~sinks:[sink] in
+  let logger =
+    Logger.create ~min_level:Level.Information ~sinks:[(sink, None)]
+  in
 
   (* Add an enricher that adds a correlation ID *)
   let enricher event =
@@ -235,7 +243,9 @@ let test_logger_enricher () =
 let test_logger_template_rendering () =
   let path = temp_file () in
   let sink = create_file_sink_fn path in
-  let logger = Logger.create ~min_level:Level.Information ~sinks:[sink] in
+  let logger =
+    Logger.create ~min_level:Level.Information ~sinks:[(sink, None)]
+  in
 
   (* Log with template variables - these should be expanded in rendered
      output *)

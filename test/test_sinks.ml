@@ -113,15 +113,13 @@ let test_composite_sink () =
   let sink1 =
     { Composite_sink.emit_fn= (fun event -> File_sink.emit file_sink1 event)
     ; flush_fn= (fun () -> File_sink.flush file_sink1)
-    ; close_fn= (fun () -> File_sink.close file_sink1)
-    ; min_level= None }
+    ; close_fn= (fun () -> File_sink.close file_sink1) }
   in
 
   let sink2 =
     { Composite_sink.emit_fn= (fun event -> File_sink.emit file_sink2 event)
     ; flush_fn= (fun () -> File_sink.flush file_sink2)
-    ; close_fn= (fun () -> File_sink.close file_sink2)
-    ; min_level= None }
+    ; close_fn= (fun () -> File_sink.close file_sink2) }
   in
 
   let composite = Composite_sink.create [sink1; sink2] in

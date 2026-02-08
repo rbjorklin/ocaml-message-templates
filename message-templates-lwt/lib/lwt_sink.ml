@@ -31,24 +31,14 @@ end
 type sink_fn =
   { emit_fn: Log_event.t -> unit Lwt.t
   ; flush_fn: unit -> unit Lwt.t
-  ; close_fn: unit -> unit Lwt.t
-  ; min_level: Level.t option }
+  ; close_fn: unit -> unit Lwt.t }
 
 (** Create a composite sink from a list of sink functions *)
 let composite_sink (sinks : sink_fn list) : sink_fn =
   { emit_fn=
       (fun event ->
         let open Lwt.Syntax in
-        let event_level = Log_event.get_level event in
-        let* _ =
-          Lwt_list.iter_p
-            (fun sink ->
-              match sink.min_level with
-              | Some min_level when Level.compare event_level min_level < 0 ->
-                  Lwt.return () (* Skip - event level too low *)
-              | _ -> sink.emit_fn event )
-            sinks
-        in
+        let* _ = Lwt_list.iter_p (fun sink -> sink.emit_fn event) sinks in
         Lwt.return () )
   ; flush_fn=
       (fun () ->
@@ -59,6 +49,5 @@ let composite_sink (sinks : sink_fn list) : sink_fn =
       (fun () ->
         let open Lwt.Syntax in
         let* _ = Lwt_list.iter_p (fun sink -> sink.close_fn ()) sinks in
-        Lwt.return () )
-  ; min_level= None }
+        Lwt.return () ) }
 ;;

@@ -61,8 +61,10 @@ type t
 
 (** {2 Core Functions} *)
 
-val create : min_level:Level.t -> sinks:Composite_sink.sink_fn list -> t
-(** Create a logger with minimum level and sinks *)
+val create :
+  min_level:Level.t -> sinks:(Composite_sink.sink_fn * Level.t option) list -> t
+(** Create a logger with minimum level and sinks (with optional per-sink level
+    filtering) *)
 
 val write :
   t -> ?exn:exn -> Level.t -> string -> (string * Yojson.Safe.t) list -> unit

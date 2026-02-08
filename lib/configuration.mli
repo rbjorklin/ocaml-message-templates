@@ -19,6 +19,10 @@ type t
 
 type sink_config
 
+val sink_config : ?min_level:Level.t -> Composite_sink.sink_fn -> sink_config
+(** Create a sink configuration from a sink function with optional minimum level
+*)
+
 val create : unit -> t
 (** Create a new configuration with default minimum level (Information) *)
 

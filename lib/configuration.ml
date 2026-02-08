@@ -4,6 +4,8 @@ type sink_config =
   { sink_fn: Composite_sink.sink_fn
   ; min_level: Level.t option }
 
+let sink_config ?min_level sink_fn = {sink_fn; min_level}
+
 type t =
   { min_level: Level.t
   ; sinks: sink_config list
@@ -40,16 +42,9 @@ let fatal config = minimum_level Level.Fatal config
 let add_sink ?min_level ~create ~emit ~flush ~close config =
   let sink = create () in
   let sink_fn =
-    { Composite_sink.emit_fn=
-        (fun event ->
-          match min_level with
-          | Some min_lvl
-            when Level.compare (Log_event.get_level event) min_lvl < 0 ->
-              () (* Skip - event level too low for this sink *)
-          | _ -> emit sink event )
+    { Composite_sink.emit_fn= (fun event -> emit sink event)
     ; flush_fn= (fun () -> flush sink)
-    ; close_fn= (fun () -> close sink)
-    ; min_level }
+    ; close_fn= (fun () -> close sink) }
   in
   {config with sinks= {sink_fn; min_level} :: config.sinks}
 ;;
@@ -102,20 +97,8 @@ let write_to ?min_level (sink_config : sink_config) config =
     | None, Some level -> Some level
     | None, None -> None
   in
-  (* Wrap emit_fn with level checking *)
-  let wrapped_emit_fn event =
-    match effective_min_level with
-    | Some min_lvl when Level.compare (Log_event.get_level event) min_lvl < 0 ->
-        () (* Skip - event level too low for this sink *)
-    | _ -> sink_config.sink_fn.Composite_sink.emit_fn event
-  in
-  let new_sink_fn =
-    { sink_config.sink_fn with
-      Composite_sink.emit_fn= wrapped_emit_fn
-    ; min_level= effective_min_level }
-  in
   let new_sink_config =
-    {sink_fn= new_sink_fn; min_level= effective_min_level}
+    {sink_fn= sink_config.sink_fn; min_level= effective_min_level}
   in
   {config with sinks= new_sink_config :: config.sinks}
 ;;
@@ -152,16 +135,18 @@ let filter_by_min_level level config =
 
 (** Create the logger from configuration *)
 let create_logger config =
-  (* Extract sink functions - per-sink level filtering happens at runtime in
-     Composite_sink.emit, so we pass all sinks through *)
-  let all_sinks : Composite_sink.sink_fn list =
+  (* Extract sink functions with their min_level for per-sink filtering *)
+  let sinks_with_levels : (Composite_sink.sink_fn * Level.t option) list =
     List.map
-      (fun (sink_config : sink_config) -> sink_config.sink_fn)
+      (fun (sink_config : sink_config) ->
+        (sink_config.sink_fn, sink_config.min_level) )
       config.sinks
   in
 
   (* Create the logger *)
-  let logger = Logger.create ~min_level:config.min_level ~sinks:all_sinks in
+  let logger =
+    Logger.create ~min_level:config.min_level ~sinks:sinks_with_levels
+  in
 
   (* Add enrichers *)
   let logger =

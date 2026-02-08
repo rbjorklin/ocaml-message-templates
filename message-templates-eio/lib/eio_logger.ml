@@ -5,7 +5,7 @@ open Message_templates
 (** Logger implementation type *)
 type t =
   { min_level: Level.t
-  ; sinks: Eio_sink.sink_fn list
+  ; sinks: (Eio_sink.sink_fn * Level.t option) list
   ; enrichers: (Log_event.t -> Log_event.t) list
   ; filters: (Log_event.t -> bool) list
   ; context_properties: (string * Yojson.Safe.t) list
@@ -65,7 +65,13 @@ let write t ?exn level message_template properties =
     if not (passes_filters t event) then
       ()
     else
-      List.iter (fun sink -> sink.Eio_sink.emit_fn event) t.sinks
+      (* Emit to all sinks with per-sink level filtering *)
+      List.iter
+        (fun (sink_fn, min_level) ->
+          match min_level with
+          | Some min_lvl when Level.compare level min_lvl < 0 -> ()
+          | _ -> sink_fn.Eio_sink.emit_fn event )
+        t.sinks
 ;;
 
 (** Fire-and-forget logging - runs in background fiber *)
@@ -152,7 +158,11 @@ let create ?sw ~min_level ~sinks () =
 ;;
 
 (** Flush all sinks *)
-let flush t = List.iter (fun sink -> sink.Eio_sink.flush_fn ()) t.sinks
+let flush t =
+  List.iter (fun (sink_fn, _) -> sink_fn.Eio_sink.flush_fn ()) t.sinks
+;;
 
 (** Close all sinks *)
-let close t = List.iter (fun sink -> sink.Eio_sink.close_fn ()) t.sinks
+let close t =
+  List.iter (fun (sink_fn, _) -> sink_fn.Eio_sink.close_fn ()) t.sinks
+;;

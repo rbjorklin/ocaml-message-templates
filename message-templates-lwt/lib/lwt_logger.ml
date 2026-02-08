@@ -6,7 +6,7 @@ open Lwt.Syntax
 (** Logger implementation type *)
 type t =
   { min_level: Level.t
-  ; sinks: Lwt_sink.sink_fn list
+  ; sinks: (Lwt_sink.sink_fn * Level.t option) list
   ; enrichers: (Log_event.t -> Log_event.t) list
   ; filters: (Log_event.t -> bool) list
   ; context_properties: (string * Yojson.Safe.t) list
@@ -65,8 +65,14 @@ let write t ?exn level message_template properties =
     if not (passes_filters t event) then
       Lwt.return ()
     else
+      (* Emit to all sinks with per-sink level filtering *)
       let* () =
-        Lwt_list.iter_p (fun sink -> sink.Lwt_sink.emit_fn event) t.sinks
+        Lwt_list.iter_p
+          (fun (sink_fn, min_level) ->
+            match min_level with
+            | Some min_lvl when Level.compare level min_lvl < 0 -> Lwt.return ()
+            | _ -> sink_fn.Lwt_sink.emit_fn event )
+          t.sinks
       in
       Lwt.return ()
 ;;
@@ -118,7 +124,11 @@ let create ~min_level ~sinks =
 ;;
 
 (** Flush all sinks *)
-let flush t = Lwt_list.iter_p (fun sink -> sink.Lwt_sink.flush_fn ()) t.sinks
+let flush t =
+  Lwt_list.iter_p (fun (sink_fn, _) -> sink_fn.Lwt_sink.flush_fn ()) t.sinks
+;;
 
 (** Close all sinks *)
-let close t = Lwt_list.iter_p (fun sink -> sink.Lwt_sink.close_fn ()) t.sinks
+let close t =
+  Lwt_list.iter_p (fun (sink_fn, _) -> sink_fn.Lwt_sink.close_fn ()) t.sinks
+;;
