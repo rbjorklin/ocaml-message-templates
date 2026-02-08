@@ -4,3 +4,9 @@
  (preprocess
   (pps message-templates-ppx ppx_bench))
  (modes byte exe))
+
+; Run benchmarks with: dune build @bench
+(rule
+ (alias bench)
+ (action
+  (run ./benchmark.exe -ascii -quota 1)))
