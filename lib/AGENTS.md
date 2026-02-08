@@ -55,7 +55,7 @@ Per [OCamlverse runtime docs](https://ocamlverse.net/content/runtime.html):
 ### Mutex Safety with Fun.protect
 - Manual `Mutex.lock`/`Mutex.unlock` pairs are error-prone and can deadlock on exceptions
 - Use `with_lock t f = Mutex.lock t.lock; Fun.protect ~finally:(fun () -> Mutex.unlock t.lock) f`
-- Pattern eliminated 15+ manual lock/unlock pairs in async_sink_queue.ml
+- Pattern used in circuit_breaker.ml and other modules with mutex-protected state
 - Exceptions no longer escape with locks held, preventing deadlock scenarios
 
 ### Check-Work-Record Pattern

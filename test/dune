@@ -9,7 +9,6 @@
   test_logger
   test_metrics
   test_parser
-  test_phase6_async_queue
   test_ppx_comprehensive
   test_qcheck_filters
   test_qcheck_properties
