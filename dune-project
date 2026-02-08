@@ -25,7 +25,6 @@
     (ppxlib (>= 0.35.0))
     (angstrom (>= 0.15.0))
     (yojson (>= 2.0.0))
-    (eio (>= 1.0))
     (ptime (>= 1.0))
      (alcotest :with-test)
      (qcheck :with-test)
