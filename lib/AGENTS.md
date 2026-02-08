@@ -124,14 +124,8 @@ let parse_template str =
 ### Runtime Helpers Coupling
 - `console_sink.ml` and `file_sink.ml` share template formatting logic
 - Both depend on `Level.to_short_string` for level formatting
-- `generic_to_string` and `generic_to_json` use Obj module for fallback
-- PPX generates calls to these for unknown types at compile time
-
-### Type Conversion Architecture
-- Type-specific converters (`string_to_json`, `int_to_json`, etc.) exist in `runtime_helpers.ml` but are only used internally by `generic_to_json`
-- The PPX does NOT use type-specific converters - it always calls `generic_to_json` for all template variables
-- `Safe_conversions` module is part of public API for manual use, but PPX never uses it
-- All type conversion for template variables happens at runtime via Obj introspection, never at compile time
+- `generic_to_string` and `generic_to_json` use Obj module for runtime type introspection
+- PPX generates calls to `generic_to_json` for all template variables (compile-time type detection is not possible)
 
 ### OCaml Runtime Representation
 Per [OCamlverse runtime docs](https://ocamlverse.net/content/runtime.html):

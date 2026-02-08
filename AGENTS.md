@@ -133,7 +133,7 @@ Sinks (Console, File, JSON, Composite, Null)
 ### PPX vs Runtime Type Conversion
 - **Critical constraint**: PPX expansion occurs BEFORE type checking, so compile-time type detection is impossible
 - **Consequence**: Type annotations on variables (e.g., `let x : int = 42`) do NOT affect generated code - all template variables use `Runtime_helpers.generic_to_json`
-- **Misconception to avoid**: The presence of type-specific converters (`string_to_json`, `int_to_json`, etc.) in `runtime_helpers.ml` does not mean the PPX uses them - it only uses `generic_to_json`
+- **Architecture**: `Runtime_helpers.generic_to_json` uses Obj module for runtime type introspection - there are no type-specific converters
 
 ### Logger Emit Path
 - `Logger.write` calls `emit_fn` directly on each sink
