@@ -1,0 +1,31 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "formatter": {},
+  "lsp": {},
+  "permission": {
+    "lsp": "allow"
+  },
+  "theme": "opencode",
+  // https://opencode.ai/docs/config/#instructions
+  "instructions": [".opencode/instructions/ocaml.md"],
+  "mcp": {
+    "context7": {
+      "type": "remote",
+      "url": "https://mcp.context7.com/mcp"
+    }
+  },
+  "watcher": {
+    "ignore": [
+      "_build",
+      ".opam",
+      ".opencode/node_modules",
+      ".git"
+    ]
+  },
+  "agent": {
+    // See .opencode/agent/<filename>.md
+    // plan - https://github.com/anomalyco/opencode/blob/4b7abc0a2cfad57fa1d5c82fc91906e654ad8191/packages/opencode/src/session/prompt/plan.txt
+    // build - https://github.com/anomalyco/opencode/blob/3408c100576deab14e0334acdd6b4c3d67573f0e/packages/opencode/src/session/prompt/qwen.txt
+    // beast - https://github.com/anomalyco/opencode/blob/4b7abc0a2cfad57fa1d5c82fc91906e654ad8191/packages/opencode/src/session/prompt/beast.txt
+  }
+}
