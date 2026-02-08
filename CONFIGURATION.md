@@ -12,7 +12,7 @@ open Message_templates
 let () =
   Configuration.create ()
   |> Configuration.write_to_console ()
-  |> Configuration.create_logger
+  |> Configuration.build
   |> Log.set_logger;
   Log.information "Application started" []
 ```
@@ -21,12 +21,14 @@ let () =
 
 ```ocaml
 let () =
-  Configuration.create ()
-  |> Configuration.information  (* Set minimum level *)
-  |> Configuration.write_to_console ~colors:true ()
-  |> Configuration.write_to_file ~rolling:File_sink.Daily "app.log"
-  |> Configuration.create_logger
-  |> Log.set_logger;
+  let logger =
+    Configuration.create ()
+    |> Configuration.information  (* Set minimum level *)
+    |> Configuration.write_to_console ~colors:true ()
+    |> Configuration.write_to_file ~rolling:File_sink.Daily "app.log"
+    |> Configuration.build
+  in
+  Log.set_logger logger;
   Log.information "Application started" []
 ```
 
@@ -34,13 +36,15 @@ let () =
 
 ```ocaml
 let () =
-  Configuration.create ()
-  |> Configuration.warning  (* Only warnings and above *)
-  |> Configuration.write_to_file ~rolling:File_sink.Hourly "app.log"
-  |> Configuration.write_to_file ~rolling:File_sink.Infinite "errors.log"
-      ~min_level:Level.Error
-  |> Configuration.create_logger
-  |> Log.set_logger
+  let logger =
+    Configuration.create ()
+    |> Configuration.warning  (* Only warnings and above *)
+    |> Configuration.write_to_file ~rolling:File_sink.Hourly "app.log"
+    |> Configuration.write_to_file ~rolling:File_sink.Infinite "errors.log"
+        ~min_level:Level.Error
+    |> Configuration.build
+  in
+  Log.set_logger logger
 ```
 
 ---
@@ -54,7 +58,7 @@ Configuration.create ()
   |> method1
   |> method2
   |> method3
-  |> Configuration.create_logger
+  |> Configuration.build
 ```
 
 This makes it easy to:
@@ -78,7 +82,7 @@ let make_logger ~debug_mode =
   in
   config
   |> Configuration.write_to_file "app.log"
-  |> Configuration.create_logger
+  |> Configuration.build
 ```
 
 ---
@@ -119,7 +123,7 @@ Events below the minimum level are discarded instantly without processing:
 ```ocaml
 (* This is very fast - debug is filtered at the level check *)
 Log.debug "Detailed trace: {var1} {var2} {var3}"
-  ["var1", `String v1; "var2", `String v2; "var3", `String v3]
+  [("var1", `String v1); ("var2", `String v2); ("var3", `String v3)]
 ```
 
 ---
@@ -142,7 +146,7 @@ Configuration.write_to_console
 
 (* Custom output template *)
 Configuration.write_to_console
-  ~output_template:"{@t:u} [{@l:u3}] {@m}"
+  ~output_template:"{timestamp} [{level}] {message}"
   ()
 
 (* Disable colors on non-TTY *)
@@ -167,31 +171,48 @@ Configuration.write_to_file "app.log"
 (* With daily rotation *)
 Configuration.write_to_file
   ~rolling:File_sink.Daily
-  "app-{date}.log"
+  "logs/app.log"
 
 (* With hourly rotation for high-volume apps *)
 Configuration.write_to_file
   ~rolling:File_sink.Hourly
-  "app-{date}-{hour}.log"
+  "logs/app.log"
 
-(* By size (100MB max per file) *)
+(* Never roll - single file *)
 Configuration.write_to_file
-  ~rolling:(File_sink.By_size (100 * 1024 * 1024))
-  "app.log"
+  ~rolling:File_sink.Infinite
+  "logs/app.log"
 
-(* JSON structured logging *)
+(* With custom output template *)
 Configuration.write_to_file
-  ~output_template:"{@t} {@mt} {...}"
-  "app.json"
+  ~output_template:"{timestamp} [{level}] {message}"
+  "logs/app.log"
 ```
 
 **Rolling Strategies:**
 - `Infinite`: Single file, no rotation
-- `Daily`: New file each day
-- `Hourly`: New file each hour  
-- `By_size max_bytes`: New file when size exceeded
+- `Daily`: New file each day (appends `-YYYYMMDD` to filename)
+- `Hourly`: New file each hour (appends `-YYYYMMDDHH` to filename)
 
 **Best Practice**: Use `Daily` for most applications
+
+#### JSON Sink
+
+Output pure CLEF/JSON structured logging:
+
+```ocaml
+(* Create JSON file sink *)
+let json_sink_instance = Json_sink.create "output.clef.json" in
+let json_sink =
+  { Composite_sink.emit_fn = (fun event -> Json_sink.emit json_sink_instance event)
+  ; flush_fn = (fun () -> Json_sink.flush json_sink_instance)
+  ; close_fn = (fun () -> Json_sink.close json_sink_instance) }
+in
+
+Configuration.create ()
+|> Configuration.write_to json_sink
+|> Configuration.build
+```
 
 #### Null Sink
 
@@ -199,6 +220,24 @@ Discard all logs (useful for testing):
 
 ```ocaml
 Configuration.write_to_null ()
+```
+
+#### Custom Sinks
+
+Add custom sinks using `write_to`:
+
+```ocaml
+let my_custom_sink =
+  { Composite_sink.emit_fn = (fun event ->
+      (* Your custom emit logic *)
+      print_endline (Log_event.message event))
+  ; flush_fn = (fun () -> ())
+  ; close_fn = (fun () -> ()) }
+in
+
+Configuration.create ()
+|> Configuration.write_to my_custom_sink
+|> Configuration.build
 ```
 
 #### Multiple Sinks
@@ -210,7 +249,7 @@ Configuration.create ()
 |> Configuration.write_to_console ~colors:true ()
 |> Configuration.write_to_file "app.log"
 |> Configuration.write_to_file "errors.log" ~min_level:Level.Error
-|> Configuration.create_logger
+|> Configuration.build
 ```
 
 Events go to **all sinks** that pass their filters.
@@ -246,9 +285,7 @@ Each sink can have its own minimum level:
 The `minimum_level` does level-based filtering automatically. For additional filtering:
 
 ```ocaml
-Configuration.with_filter
-  (Filter.by_level Level.Warning)
-  config
+Configuration.filter_by_min_level Level.Warning config
 ```
 
 #### Filter by Property
@@ -256,8 +293,10 @@ Configuration.with_filter
 Only log events with specific properties:
 
 ```ocaml
-Configuration.with_filter
-  (Filter.has_property "component" (`String "auth"))
+Configuration.filter_by
+  (Filter.property_filter "component" (function
+    | `String "auth" -> true
+    | _ -> false))
   config
 ```
 
@@ -265,24 +304,24 @@ Configuration.with_filter
 
 ```ocaml
 (* All of these must match *)
-Configuration.with_filter
+Configuration.filter_by
   (Filter.all [
-    Filter.by_level Level.Warning;
-    Filter.has_property "service" (`String "api")
+    Filter.level_filter Level.Warning;
+    Filter.property_filter "service" (fun _ -> true)
   ])
   config
 
 (* At least one must match *)
-Configuration.with_filter
+Configuration.filter_by
   (Filter.any [
-    Filter.by_level Level.Error;
-    Filter.has_property "retry_count" (`Int 3)
+    Filter.level_filter Level.Error;
+    Filter.matching "retry_count"
   ])
   config
 
 (* Invert a filter *)
-Configuration.with_filter
-  (Filter.not (Filter.has_property "skip_logging" (`Bool true)))
+Configuration.filter_by
+  (Filter.not_filter Filter.always_block)
   config
 ```
 
@@ -294,13 +333,12 @@ Add properties automatically to all log events:
 
 ```ocaml
 Configuration.create ()
-|> Configuration.with_property "version" (`String "1.2.3")
-|> Configuration.with_property "environment" (`String "production")
-|> Configuration.with_enricher (fun event ->
-    (* Add timestamp of log creation *)
-    event
-)
-|> Configuration.create_logger
+|> Configuration.enrich_with_property "version" (`String "1.2.3")
+|> Configuration.enrich_with_property "environment" (`String "production")
+|> Configuration.enrich_with (fun event ->
+    (* Add computed properties to event *)
+    event)
+|> Configuration.build
 ```
 
 **When to use:**
@@ -321,8 +359,8 @@ let dev_logger () =
   Configuration.create ()
   |> Configuration.debug          (* Verbose *)
   |> Configuration.write_to_console ~colors:true ()
-  |> Configuration.with_property "env" (`String "dev")
-  |> Configuration.create_logger
+  |> Configuration.enrich_with_property "env" (`String "dev")
+  |> Configuration.build
 ```
 
 ### Production Configuration
@@ -339,9 +377,9 @@ let prod_logger () =
        ~rolling:File_sink.Daily
        ~min_level:Level.Error
        "/var/log/app/errors.log"
-  |> Configuration.with_property "env" (`String "prod")
-  |> Configuration.with_property "hostname" (`String (Unix.gethostname ()))
-  |> Configuration.create_logger
+  |> Configuration.enrich_with_property "env" (`String "prod")
+  |> Configuration.enrich_with_property "hostname" (`String (Unix.gethostname ()))
+  |> Configuration.build
 ```
 
 ### Testing Configuration
@@ -350,7 +388,7 @@ let prod_logger () =
 let test_logger () =
   Configuration.create ()
   |> Configuration.write_to_null ()  (* Discard all logs *)
-  |> Configuration.create_logger
+  |> Configuration.build
 ```
 
 ### Staging Configuration
@@ -361,8 +399,8 @@ let staging_logger () =
   |> Configuration.warning          (* Less verbose than dev *)
   |> Configuration.write_to_console ()
   |> Configuration.write_to_file "/var/log/app/staging.log"
-  |> Configuration.with_property "env" (`String "staging")
-  |> Configuration.create_logger
+  |> Configuration.enrich_with_property "env" (`String "staging")
+  |> Configuration.build
 ```
 
 ---
@@ -382,15 +420,15 @@ let logger_from_env () =
     | Some "error" -> Level.Error
     | _ -> Level.Information
   in
-  
+
   Configuration.create ()
   |> Configuration.minimum_level level
   |> Configuration.write_to_console ~colors:true ()
   |> (match Sys.getenv_opt "LOG_FILE" with
       | Some path -> Configuration.write_to_file path
       | None -> fun c -> c)
-  |> Configuration.with_property "env" (`String env)
-  |> Configuration.create_logger
+  |> Configuration.enrich_with_property "env" (`String env)
+  |> Configuration.build
 ```
 
 ### Per-Module Loggers
@@ -402,8 +440,8 @@ module Auth = struct
     Configuration.create ()
     |> Configuration.information
     |> Configuration.write_to_file "auth.log"
-    |> Configuration.with_property "module" (`String "auth")
-    |> Configuration.create_logger
+    |> Configuration.enrich_with_property "module" (`String "auth")
+    |> Configuration.build
 end
 
 module Api = struct
@@ -411,8 +449,8 @@ module Api = struct
     Configuration.create ()
     |> Configuration.debug  (* More verbose for API *)
     |> Configuration.write_to_file "api.log"
-    |> Configuration.with_property "module" (`String "api")
-    |> Configuration.create_logger
+    |> Configuration.enrich_with_property "module" (`String "api")
+    |> Configuration.build
 end
 ```
 
@@ -420,19 +458,18 @@ end
 
 ```ocaml
 let make_logger ~user_id ~request_id =
-  let config = Configuration.create ()
-  in
+  let config = Configuration.create () in
   let config = match user_id with
-    | Some uid -> Configuration.with_property "user_id" (`String uid) config
+    | Some uid -> Configuration.enrich_with_property "user_id" (`String uid) config
     | None -> config
   in
   let config = match request_id with
-    | Some req -> Configuration.with_property "request_id" (`String req) config
+    | Some req -> Configuration.enrich_with_property "request_id" (`String req) config
     | None -> config
   in
   config
   |> Configuration.write_to_file "app.log"
-  |> Configuration.create_logger
+  |> Configuration.build
 ```
 
 ---
@@ -443,34 +480,40 @@ Control the format of log output with templates:
 
 ### Template Variables
 
-- `@t` - Timestamp (RFC3339)
-- `@mt` - Message template (with placeholders)
-- `@m` - Rendered message (with values)
-- `@l` - Log level
-- Custom fields from properties
+- `{timestamp}` - Timestamp (RFC3339 format via `Runtime_helpers.format_timestamp`)
+- `{level}` - Log level name (or use `{level:short}` for 3-char code)
+- `{message}` - Rendered message (with values substituted)
+- Custom properties are accessed via enrichers, not directly in templates
 
-### Examples
+### Default Templates
 
-```ocaml
-(* Default *)
-"{@t} [{@l}] {@m}"
-
-(* Compact *)
-"[{@l:u3}] {@m}"
-
-(* Verbose with properties *)
-"{@t} [{@l}] [{component}] {@m}"
-
-(* JSON (for structured logging) *)
-"{@t} {@mt} {@l} {...}"
+**Console:**
+```
+[{timestamp} {level}] {message}
 ```
 
-### Log Level Format Specifiers
+**File:**
+```
+{timestamp} [{level}] {message}
+```
 
-- `{@l}` - Full name: "Information"
-- `{@l:u}` - Uppercase: "INFORMATION"
-- `{@l:l}` - Lowercase: "information"
-- `{@l:u3}` - Uppercase 3-char: "INF"
+### Custom Examples
+
+```ocaml
+(* Compact console output *)
+Configuration.write_to_console
+  ~output_template:"[{level:short}] {message}"
+  ()
+
+(* Verbose file output with date only *)
+Configuration.write_to_file
+  ~output_template:"{timestamp} [{level}] {message}"
+  "app.log"
+```
+
+### Log Level Formatting
+
+The level is formatted using `Level.to_string` (full name) or `Level.to_short_string` (3-char code). Access the short form in custom formatters by creating your own sink wrapper.
 
 ---
 
@@ -489,11 +532,20 @@ Log.debug "Expensive trace" [...]  (* No computation happens *)
 
 ### Sink Performance
 
-- **Console**: ~50k events/sec
-- **File**: ~10k events/sec (depends on I/O)
+- **Console**: Fast for low volume
+- **File**: Depends on I/O subsystem
 - **Multiple sinks**: Each event goes to all sinks
 
 **Recommendation**: Use appropriate minimum levels to reduce volume
+
+### Timestamp Caching
+
+For high-frequency logging, millisecond timestamp caching is enabled by default:
+
+```ocaml
+(* Disable if you need unique timestamps for every log *)
+Timestamp_cache.set_enabled false
+```
 
 ---
 
@@ -524,7 +576,7 @@ Log.debug "Expensive trace" [...]  (* No computation happens *)
 ### Performance Issues
 
 1. Lower the minimum level to reduce volume
-2. Use hourly rotation instead of daily
+2. Use hourly rotation instead of daily for very high volume
 3. Use file sinks instead of console for high volume
 4. Reduce enrichment/filtering complexity
 
@@ -536,7 +588,7 @@ Log.debug "Expensive trace" [...]  (* No computation happens *)
 
 ```ocaml
 val create : unit -> t
-(** Create a new configuration *)
+(** Create a new configuration with default minimum level (Information) *)
 
 val minimum_level : Level.t -> t -> t
 (** Set the minimum log level *)
@@ -550,6 +602,7 @@ val fatal : t -> t
 (** Convenience methods for common levels *)
 
 val write_to_console :
+  ?min_level:Level.t ->
   ?colors:bool ->
   ?stderr_threshold:Level.t ->
   ?output_template:string ->
@@ -558,25 +611,59 @@ val write_to_console :
 
 val write_to_file :
   ?min_level:Level.t ->
-  ?rolling:File_sink.rolling ->
+  ?rolling:File_sink.rolling_interval ->
   ?output_template:string ->
   string -> t -> t
 (** Add file sink *)
 
-val write_to_null : unit -> t -> t
+val write_to_null : ?min_level:Level.t -> unit -> t -> t
 (** Add null sink (discard all) *)
 
-val with_filter : Filter.t -> t -> t
-(** Add a filter *)
+val write_to : ?min_level:Level.t -> Composite_sink.sink_fn -> t -> t
+(** Add a custom sink *)
 
-val with_property : string -> Yojson.Safe.t -> t -> t
-(** Add an enriching property *)
+val filter_by : Filter.t -> t -> t
+(** Add a filter predicate *)
 
-val with_enricher : (Log_event.t -> Log_event.t) -> t -> t
+val filter_by_min_level : Level.t -> t -> t
+(** Add minimum level filter *)
+
+val enrich_with_property : string -> Yojson.Safe.t -> t -> t
+(** Add an enriching property to all events *)
+
+val enrich_with : (Log_event.t -> Log_event.t) -> t -> t
 (** Add an enricher function *)
 
-val create_logger : t -> Logger.t
+val build : t -> Logger.t
 (** Build the logger from configuration *)
+```
+
+### Filter Functions
+
+```ocaml
+val level_filter : Level.t -> t
+(** Filter by minimum level *)
+
+val property_filter : string -> (Yojson.Safe.t -> bool) -> t
+(** Filter by property value *)
+
+val matching : string -> t
+(** Filter that matches if property exists *)
+
+val all : t list -> t
+(** Combine filters with AND logic *)
+
+val any : t list -> t
+(** Combine filters with OR logic *)
+
+val not_filter : t -> t
+(** Negate a filter *)
+
+val always_pass : t
+(** Always include filter *)
+
+val always_block : t
+(** Always exclude filter *)
 ```
 
 ---

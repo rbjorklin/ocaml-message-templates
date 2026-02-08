@@ -12,19 +12,21 @@ A PPX-based library for Message Templates in OCaml that provides compile-time te
 - **PPX-driven**: Full compile-time parsing and code generation for zero runtime overhead
 - **Operator Support**: Special operators for structure preservation (`@`) and stringification (`$`)
 - **Format Specifiers**: Support for format strings like `{count:05d}`, `{value:.2f}`, `{flag:B}`
-- **High Performance**: Comparable to hand-written Printf code
+- **Alignment**: Width and alignment specifiers like `{name,10}` or `{name,-10}`
+- **High Performance**: Comparable to hand-written Printf code with millisecond timestamp caching
 
 ### Logging Infrastructure
-- **Log Levels**: Six levels (Verbose, Debug, Information, Warning, Error, Fatal) with proper ordering
-- **Multiple Sinks**: Console (with colors), File (with rolling), Composite, and Null sinks
-- **Async Logging**: Full support for Lwt (monadic) and Eio (effects-based) concurrency
-- **Structured Logging**: Automatic JSON output with timestamps and properties
-- **Context Tracking**: Ambient properties that flow across function calls
+- **Log Levels**: Six levels (Verbose, Debug, Information, Warning, Error, Fatal) with full comparison operators
+- **Multiple Sinks**: Console (with colors), File (with rolling), JSON, Composite, and Null sinks
+- **Async Logging**: Non-blocking event queue with circuit breaker protection
+- **Structured Logging**: Automatic JSON output following CLEF format with timestamps and properties
+- **Context Tracking**: Ambient properties and correlation IDs that flow across function calls
 - **Enrichment**: Add contextual properties automatically to all log events
 - **Filtering**: Level-based and property-based filtering with logical combinators
 - **Global Logger**: Static logger access similar to Serilog.Log
 - **PPX Extensions**: Clean syntax with `[%log.level "message {var}"]`
 - **Fluent Configuration**: Easy-to-use configuration builder API
+- **Metrics**: Per-sink observability with latency percentiles and error tracking
 
 ## Installation
 
@@ -99,25 +101,27 @@ open Message_templates
 
 let () =
   (* Setup logger at application startup *)
-  Configuration.create ()
-  |> Configuration.minimum_level Level.Information
-  |> Configuration.write_to_console ~colors:true ()
-  |> Configuration.write_to_file ~rolling:File_sink.Daily "app.log"
-  |> Configuration.create_logger
-  |> Log.set_logger
+  let logger =
+    Configuration.create ()
+    |> Configuration.minimum_level Level.Information
+    |> Configuration.write_to_console ~colors:true ()
+    |> Configuration.write_to_file ~rolling:File_sink.Daily "app.log"
+    |> Configuration.build
+  in
+  Log.set_logger logger
 ```
 
 Log messages with variables:
 
 ```ocaml
 let process_user user_id =
-  Log.information "Processing user {user_id}" ["user_id", `Int user_id];
+  Log.information "Processing user {user_id}" [("user_id", `Int user_id)];
 
   try
     (* ... work ... *)
-    Log.debug "User {user_id} processed successfully" ["user_id", `Int user_id]
+    Log.debug "User {user_id} processed successfully" [("user_id", `Int user_id)]
   with exn ->
-    Log.error ~exn "Failed to process user {user_id}" ["user_id", `Int user_id]
+    Log.error ~exn "Failed to process user {user_id}" [("user_id", `Int user_id)]
 ```
 
 ### Async Logging
@@ -130,20 +134,20 @@ open Message_templates_lwt
 
 let main () =
   (* Setup async logger *)
-  let logger = 
+  let logger =
     Configuration.create ()
     |> Configuration.minimum_level Level.Information
     |> Configuration.write_to_console ~colors:true ()
     |> Configuration.write_to_file ~rolling:Daily "app.log"
-    |> Configuration.create_logger
+    |> Lwt_configuration.create_logger
   in
 
   (* All log methods return unit Lwt.t *)
-  let* () = Lwt_logger.information logger "Server starting on port {port}" ["port", `Int 8080] in
-  
+  let* () = Lwt_logger.information logger "Server starting on port {port}" [("port", `Int 8080)] in
+
   (* Concurrent logging to multiple sinks *)
-  let* () = Lwt_logger.debug logger "Debug info: {user}" ["user", `String "alice"] in
-  
+  let* () = Lwt_logger.debug logger "Debug info: {user}" [("user", `String "alice")] in
+
   (* Clean up *)
   Lwt_logger.close logger
 
@@ -170,21 +174,21 @@ let run ~stdout ~fs =
     |> Configuration.minimum_level Level.Information
     |> Configuration.write_to_console ~colors:true ()
     |> Configuration.write_to_file ~rolling:Daily "app.log"
-    |> Configuration.create_logger ~sw
+    |> Eio_configuration.create_logger ~sw
   in
 
   (* Synchronous logging - waits for completion *)
   Eio_logger.information logger "Server starting" [];
-  
+
   (* Fire-and-forget logging - runs in background fiber *)
   Eio_logger.write_async logger "Background task started" [];
-  
+
   (* Handle requests *)
   let handle_request req =
     Eio_logger.information logger "Request {method} {path}"
-      ["method", `String req.method; "path", `String req.path]
+      [("method", `String req.method); ("path", `String req.path)]
   in
-  
+
   (* Your Eio code here *)
   ()
 
@@ -233,6 +237,26 @@ let handle_request request_id user_id =
   )
 ```
 
+### Correlation IDs
+
+For distributed tracing, use correlation IDs:
+
+```ocaml
+(* Generate and use a correlation ID automatically *)
+Log_context.with_correlation_id_auto (fun () ->
+  Log.information "Processing request" [];
+  (* All logs include correlation ID *)
+  call_external_service ();
+  Log.information "Request completed" []
+);
+
+(* Or use a specific correlation ID *)
+Log_context.with_correlation_id "req-abc-123" (fun () ->
+  (* Logs include @i field with correlation ID *)
+  process_request ()
+)
+```
+
 ### Configuration Options
 
 ```ocaml
@@ -252,6 +276,13 @@ let logger =
        ~output_template:"{timestamp} [{level}] {message}"
        "logs/app.log"
 
+  (* JSON file output for pure CLEF format *)
+  |> Configuration.write_to
+       (let sink = Json_sink.create "output.json" in
+        { Composite_sink.emit_fn = (fun e -> Json_sink.emit sink e)
+        ; flush_fn = (fun () -> Json_sink.flush sink)
+        ; close_fn = (fun () -> Json_sink.close sink) })
+
   (* Static properties *)
   |> Configuration.enrich_with_property "AppVersion" (`String "1.0.0")
   |> Configuration.enrich_with_property "Environment" (`String "Production")
@@ -259,7 +290,7 @@ let logger =
   (* Filters *)
   |> Configuration.filter_by_min_level Level.Information
 
-  |> Configuration.create_logger
+  |> Configuration.build
 ```
 
 ### Operators
@@ -289,6 +320,18 @@ Common format specifiers:
 - `{var:B}` - Boolean
 - `{var:s}` - String (default)
 
+### Alignment
+
+Control field width and alignment:
+
+```ocaml
+let name = "Alice" in
+let status = "active" in
+
+[%template "|{name,10}|{status,-10}|"]
+(* Output: |     Alice|active    | *)
+```
+
 ### Escaped Braces
 
 Use doubled braces for literal braces:
@@ -297,6 +340,25 @@ Use doubled braces for literal braces:
 let msg, _ = [%template "Use {{braces}} for literals"] in
 (* Output: Use {braces} for literals *)
 ```
+
+### Type-Safe Conversions
+
+For complex types, use the Safe_conversions module:
+
+```ocaml
+open Message_templates.Runtime_helpers.Safe_conversions
+
+(* Define a converter for your type *)
+let convert = list (pair int string)
+
+(* Use it to produce JSON *)
+let json = convert [(1, "a"); (2, "b")]
+```
+
+Available converters:
+- `string`, `int`, `float`, `bool`, `int64`, `int32`, `nativeint`, `char`, `unit`
+- `list converter`, `array converter`, `option converter`
+- `pair c1 c2`, `triple c1 c2 c3`
 
 ## Architecture
 
@@ -329,7 +391,7 @@ Filtering (level/property-based)
 Sinks (Console, File, etc.)
 ```
 
-**Lwt Async:**
+**Async (with queue):**
 ```
 Application Code
        |
@@ -340,39 +402,16 @@ Level Check (fast path)
 Template Expansion (via PPX)
        |
        v
-Context Enrichment (add ambient properties)
+Non-blocking Enqueue (~1μs)
        |
        v
-Filtering (level/property-based)
+Background Thread (periodic flush)
        |
        v
-Sinks (Lwt_file_sink, Lwt_console_sink, etc.)
+Circuit Breaker (optional)
        |
        v
-Lwt Promises (concurrent sink emission)
-```
-
-**Eio Async:**
-```
-Application Code
-       |
-       v
-Level Check (fast path)
-       |
-       v
-Template Expansion (via PPX)
-       |
-       v
-Context Enrichment (add ambient properties)
-       |
-       v
-Filtering (level/property-based)
-       |
-       v
-Sinks (Eio_file_sink, Eio_console_sink, etc.)
-       |
-       v
-Eio Fibers (background logging with write_async)
+Sinks (File, Console, etc.)
 ```
 
 ## JSON Output Structure
@@ -395,9 +434,76 @@ All log events include a timestamp in RFC3339 format:
 - `@mt`: Message template (the original template string with placeholders)
 - `@m`: Rendered message (the fully formatted message with values substituted)
 - `@l`: Log level (Verbose, Debug, Information, Warning, Error, Fatal)
+- `@i`: Correlation ID (when using correlation IDs)
 - Additional fields: Captured variables and context properties
 
 The field names follow the [CLEF (Compact Log Event Format)](https://github.com/serilog/serilog-formatting-compact) convention used by Serilog and Seq.
+
+## Advanced Features
+
+### Metrics and Observability
+
+Track per-sink performance:
+
+```ocaml
+let metrics = Metrics.create () in
+
+(* Record event emission *)
+Metrics.record_event metrics ~sink_id:"file" ~latency_us:1.5;
+
+(* Get sink-specific metrics *)
+match Metrics.get_sink_metrics metrics "file" with
+| Some m ->
+    Printf.printf "Events: %d, Dropped: %d, P95 latency: %.2fμs\n"
+      m.events_total m.events_dropped m.latency_p95_us
+| None -> ()
+
+(* Export as JSON *)
+let json = Metrics.to_json metrics
+```
+
+### Circuit Breaker
+
+Protect against cascade failures:
+
+```ocaml
+let cb = Circuit_breaker.create ~failure_threshold:5 ~reset_timeout_ms:30000 () in
+
+(* Protected call *)
+match Circuit_breaker.call cb (fun () -> risky_operation ()) with
+| Some result -> (* success *)
+| None -> (* circuit open or failed *)
+```
+
+### Async Sink Queue
+
+Non-blocking event queue for high-throughput scenarios:
+
+```ocaml
+let queue = Async_sink_queue.create
+  { default_config with max_queue_size = 10000 }
+  (fun event -> File_sink.emit sink event)
+in
+
+(* Non-blocking enqueue *)
+Async_sink_queue.enqueue queue event;
+
+(* Check queue depth *)
+let depth = Async_sink_queue.get_queue_depth queue in
+
+(* Graceful shutdown *)
+Async_sink_queue.flush queue;
+Async_sink_queue.close queue
+```
+
+### Timestamp Caching
+
+For high-frequency logging, millisecond timestamp caching reduces overhead:
+
+```ocaml
+(* Enabled by default - can be disabled globally *)
+Timestamp_cache.set_enabled false
+```
 
 ## Performance
 
@@ -425,22 +531,26 @@ dune runtest
 ```
 
 This runs tests across all packages:
-- **Core library** (59 tests):
-  - Level tests (6)
-  - Sink tests (6)
-  - Logger tests (7)
-  - Configuration tests (13)
-  - Global log tests (11)
-  - PPX comprehensive tests (8)
-  - PPX log level tests (8)
+- **Core library** (comprehensive test suite):
+  - Level tests
+  - Sink tests (Console, File, JSON, Composite, Null)
+  - Logger tests
+  - Configuration tests
+  - Global log tests
+  - PPX comprehensive tests
+  - PPX log level tests
+  - Template parser tests
+  - Escape handling tests
+  - Circuit breaker tests
+  - Metrics tests
+  - Async queue tests
+  - Shutdown tests
+  - Timestamp cache tests
+  - Property-based tests (QCheck)
 
-- **Lwt package** (2 tests):
-  - Lwt logger tests
-  - Lwt sink tests
+- **Lwt package**: Lwt logger and sink tests
 
-- **Eio package** (2 tests):
-  - Eio logger tests
-  - Eio sink tests
+- **Eio package**: Eio logger and sink tests
 
 All tests passing ✅
 
@@ -448,14 +558,12 @@ All tests passing ✅
 
 See the `examples/` directory:
 
-### Template Examples
 - `basic.ml` - Simple template usage
-- `comprehensive.ml` - Advanced template features
-
-### Logging Examples
 - `logging_basic.ml` - Basic logging setup and usage
 - `logging_advanced.ml` - Multiple sinks, rolling files, enrichment
 - `logging_ppx.ml` - PPX extension usage
+- `logging_clef_ppx.ml` - PPX with pure JSON CLEF output
+- `logging_clef_json.ml` - Structured JSON logging
 
 Run examples:
 
@@ -465,6 +573,8 @@ dune exec examples/basic.exe
 dune exec examples/logging_basic.exe
 dune exec examples/logging_advanced.exe
 dune exec examples/logging_ppx.exe
+dune exec examples/logging_clef_ppx.exe
+dune exec examples/logging_clef_json.exe
 
 # Async examples (when available)
 dune exec message-templates-lwt/examples/lwt_example.exe
@@ -475,14 +585,16 @@ dune exec message-templates-eio/examples/eio_example.exe
 
 ### Core Modules
 
-- `Level` - Log levels (Verbose, Debug, Information, Warning, Error, Fatal)
+- `Level` - Log levels with full comparison operators (=, <>, <, >, <=, >=)
 - `Log_event` - Log event type with timestamp, level, message, properties
 - `Template_parser` - Template string parsing
+- `Types` - Core types (operator, hole, template_part)
 
 ### Sink Modules
 
-- `Console_sink` - Console output with colors
+- `Console_sink` - Console output with colors and templates
 - `File_sink` - File output with rolling (Infinite, Daily, Hourly)
+- `Json_sink` - Pure CLEF/JSON output
 - `Composite_sink` - Route to multiple sinks
 - `Null_sink` - Discard all events (testing)
 
@@ -492,23 +604,34 @@ dune exec message-templates-eio/examples/eio_example.exe
 - `Filter` - Filter predicates (level, property, all/any/not)
 - `Configuration` - Fluent configuration builder
 - `Log` - Global logger module
-- `Log_context` - Ambient context for properties
+- `Log_context` - Ambient context for properties and correlation IDs
+
+### Reliability Modules
+
+- `Circuit_breaker` - Error recovery pattern
+- `Async_sink_queue` - Non-blocking event queue
+- `Metrics` - Per-sink observability
+- `Timestamp_cache` - Millisecond timestamp caching
+- `Shutdown` - Graceful shutdown handling
+
+### Utility Modules
+
+- `Runtime_helpers` - Type conversions and template rendering
+- `Runtime_helpers.Safe_conversions` - Type-safe JSON converters
 
 ### Lwt Async Modules (message-templates-lwt)
 
-- `Lwt_sink` - Async sink interface with `Lwt.t` promises
-- `Lwt_file_sink` - Non-blocking file I/O with rolling
-- `Lwt_console_sink` - Async console output
 - `Lwt_logger` - Lwt-based logger with level checking
 - `Lwt_configuration` - Fluent API for async logger setup
+- `Lwt_file_sink` - Non-blocking file I/O with rolling
+- `Lwt_console_sink` - Async console output
 
 ### Eio Async Modules (message-templates-eio)
 
-- `Eio_sink` - Sync sink interface for Eio fibers
-- `Eio_file_sink` - File output using Eio
-- `Eio_console_sink` - Console output using Eio
 - `Eio_logger` - Eio-compatible logger with fiber support
 - `Eio_configuration` - Configuration builder for Eio loggers
+- `Eio_file_sink` - File output using Eio
+- `Eio_console_sink` - Console output using Eio
 
 ## Compliance with Message Templates Specification
 

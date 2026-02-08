@@ -8,6 +8,7 @@ This guide helps you migrate from other OCaml logging libraries to Message Templ
 - [From `dolog` library](#from-dolog-library)
 - [From Printf-style logging](#from-printf-style-logging)
 - [Common Patterns](#common-patterns)
+- [Advanced Features](#advanced-features)
 
 ---
 
@@ -39,7 +40,7 @@ let setup_logging () =
   let logger =
     Configuration.create ()
     |> Configuration.write_to_console ~colors:true ()
-    |> Configuration.create_logger
+    |> Configuration.build
   in
   Log.set_logger logger
 ```
@@ -55,9 +56,9 @@ Logs.debug (fun m -> m "Processing %d items" count)
 **After (Message Templates):**
 ```ocaml
 Log.information "User {username} logged in"
-  ["username", `String username];
+  [("username", `String username)];
 Log.debug "Processing {count} items"
-  ["count", `Int count]
+  [("count", `Int count)]
 ```
 
 ### Converting Tags to Properties
@@ -103,7 +104,7 @@ let logger =
   Configuration.create ()
   |> Configuration.debug
   |> Configuration.write_to_console ()
-  |> Configuration.create_logger
+  |> Configuration.build
 in
 Log.set_logger logger
 ```
@@ -119,9 +120,9 @@ Log.debug "Count: %d" count
 **After (Message Templates):**
 ```ocaml
 Log.information "User {username} logged in"
-  ["username", `String username];
+  [("username", `String username)];
 Log.debug "Count: {count}"
-  ["count", `Int count]
+  [("count", `Int count)]
 ```
 
 ---
@@ -139,9 +140,9 @@ printf "Count: %d, Score: %.2f\n" count score
 **After (Message Templates):**
 ```ocaml
 Log.information "User {username} logged in from {ip}"
-  ["username", `String username; "ip", `String ip_address];
+  [("username", `String username); ("ip", `String ip_address)];
 Log.information "Count: {count:d}, Score: {score:.2f}"
-  ["count", `Int count; "score", `Float score]
+  [("count", `Int count); ("score", `Float score)]
 ```
 
 ### Adding Structured Output
@@ -151,7 +152,7 @@ One major advantage of Message Templates is automatic JSON output:
 ```ocaml
 (* This creates both a human-readable message and structured JSON *)
 Log.information "User {username} logged in from {ip}"
-  ["username", `String "alice"; "ip", `String "192.168.1.1"]
+  [("username", `String "alice"); ("ip", `String "192.168.1.1")]
 
 (* Console output: User alice logged in from 192.168.1.1 *)
 (* JSON output: {"@t":"2026-01-31T12:00:00Z","@mt":"User {username} logged in from {ip}","@l":"Information","@m":"User alice logged in from 192.168.1.1","username":"alice","ip":"192.168.1.1"} *)
@@ -171,7 +172,7 @@ let setup_logger () =
   |> Configuration.minimum_level Level.Debug
   |> Configuration.write_to_console ~colors:true ()
   |> Configuration.write_to_file "/var/log/app.log"
-  |> Configuration.create_logger
+  |> Configuration.build
 
 let () =
   let logger = setup_logger () in
@@ -183,7 +184,7 @@ let () =
 Message Templates provides PPX extensions for compile-time template validation:
 
 ```ocaml
-(* In dune: (preprocess (pps ppx_message_templates)) *)
+(* In dune: (preprocess (pps message-templates-ppx)) *)
 
 (* Basic template *)
 let msg, json = [%template "Hello, {name}!"]
@@ -193,6 +194,10 @@ let msg, json = [%template "ID: {id:05d}, Score: {score:.1f}"]
 
 (* With operators *)
 let msg, json = [%template "Data: {$data}"]  (* Stringify operator *)
+
+(* Log level extensions *)
+let user = "alice" in
+[%log.information "User {user} logged in"]
 ```
 
 ### Context Properties
@@ -224,7 +229,7 @@ let logger =
          | `String "production" -> true
          | _ -> false)
      )
-  |> Configuration.create_logger
+  |> Configuration.build
 ```
 
 ### Multiple Sinks
@@ -237,7 +242,7 @@ let logger =
   |> Configuration.write_to_console ~colors:true ()
   |> Configuration.write_to_file "/var/log/app.log"
   |> Configuration.write_to_file ~rolling:File_sink.Daily "/var/log/app-daily.log"
-  |> Configuration.create_logger
+  |> Configuration.build
 ```
 
 ### Exception Logging
@@ -247,7 +252,123 @@ try
   risky_operation ()
 with exn ->
   Log.error ~exn "Operation failed"
-    ["operation", `String "risky_operation"]
+    [("operation", `String "risky_operation")]
+```
+
+### Correlation IDs for Distributed Tracing
+
+```ocaml
+(* Auto-generate correlation ID *)
+Log_context.with_correlation_id_auto (fun () ->
+  (* All logs include @i field with auto-generated ID *)
+  process_request ()
+)
+
+(* Or use existing ID from HTTP header *)
+Log_context.with_correlation_id request_id (fun () ->
+  (* All logs include this correlation ID *)
+  handle_request ()
+)
+```
+
+---
+
+## Advanced Features
+
+### Structured JSON Output (CLEF Format)
+
+```ocaml
+(* Create pure JSON output file *)
+let json_sink_instance = Json_sink.create "app.clef.json" in
+let json_sink =
+  { Composite_sink.emit_fn = (fun event -> Json_sink.emit json_sink_instance event)
+  ; flush_fn = (fun () -> Json_sink.flush json_sink_instance)
+  ; close_fn = (fun () -> Json_sink.close json_sink_instance) }
+in
+
+let logger =
+  Configuration.create ()
+  |> Configuration.write_to json_sink
+  |> Configuration.build
+```
+
+### Async Logging for High Volume
+
+```ocaml
+(* Wrap file sink with async queue *)
+let file_sink = File_sink.create "/var/log/app.log" in
+let queue = Async_sink_queue.create
+  { Async_sink_queue.default_config with
+    max_queue_size = 10000;
+    flush_interval_ms = 100 }
+  (fun event -> File_sink.emit file_sink event)
+in
+
+let async_sink =
+  { Composite_sink.emit_fn = Async_sink_queue.enqueue queue
+  ; flush_fn = (fun () -> Async_sink_queue.flush queue)
+  ; close_fn = (fun () -> Async_sink_queue.close queue) }
+in
+
+let logger =
+  Configuration.create ()
+  |> Configuration.write_to async_sink
+  |> Configuration.build
+```
+
+### Circuit Breaker Protection
+
+```ocaml
+(* Protect against cascade failures *)
+let cb = Circuit_breaker.create ~failure_threshold:5 ~reset_timeout_ms:30000 () in
+
+let protected_emit event =
+  match Circuit_breaker.call cb (fun () ->
+    File_sink.emit sink event
+  ) with
+  | Some () -> ()
+  | None -> (* Circuit open *)
+      print_endline "WARNING: Logging circuit open"
+```
+
+### Metrics and Monitoring
+
+```ocaml
+(* Track per-sink metrics *)
+let metrics = Metrics.create () in
+
+(* Record event emission *)
+Metrics.record_event metrics ~sink_id:"file" ~latency_us:1.5;
+
+(* Check for issues *)
+match Metrics.get_sink_metrics metrics "file" with
+| Some m when m.events_dropped > 0 ->
+    Printf.printf "WARNING: %d events dropped!\n" m.events_dropped
+| Some m ->
+    Printf.printf "P95 latency: %.2fμs\n" m.latency_p95_us
+| None -> ()
+```
+
+### Type-Safe Conversions
+
+For complex data types, use Safe_conversions:
+
+```ocaml
+open Message_templates.Runtime_helpers.Safe_conversions
+
+(* Define converter for your type *)
+type user = { id: int; name: string }
+
+let user_to_json user =
+  `Assoc [
+    ("id", `Int user.id);
+    ("name", `String user.name)
+  ]
+
+(* Use in logging *)
+let user = { id = 1; name = "alice" } in
+Log.information "User created"
+  [("user", user_to_json user)]
 ```
 
 ---
@@ -264,6 +385,30 @@ with exn ->
 | Log rotation | No | No | Yes |
 | Correlation IDs | Manual | No | Built-in |
 | Type-safe templates | No | No | Yes |
+| Async logging | No | No | Yes (with queue) |
+| Circuit breaker | No | No | Yes |
+| Metrics | No | No | Yes |
+
+---
+
+## API Changes Reference
+
+### Configuration API
+
+| Old API | New API |
+|---------|---------|
+| `Configuration.create_logger` | `Configuration.build` |
+| `Configuration.with_property` | `Configuration.enrich_with_property` |
+| `Configuration.with_filter` | `Configuration.filter_by` |
+| `Configuration.with_enricher` | `Configuration.enrich_with` |
+
+### Filter API
+
+| Old API | New API |
+|---------|---------|
+| `Filter.by_level` | `Filter.level_filter` |
+| `Filter.has_property` | `Filter.property_filter` or `Filter.matching` |
+| `Filter.not` | `Filter.not_filter` |
 
 ---
 
@@ -276,7 +421,8 @@ with exn ->
 let name = "alice" in
 let msg, _ = [%template "Hello, {name}!"]  (* Works *)
 
-let msg, _ = [%template "Hello, {name}!"]  (* Error: name not in scope *)
+(* Error: name not in scope - declare before use *)
+let msg, _ = [%template "Hello, {name}!"]
 let name = "alice"
 ```
 
@@ -286,22 +432,35 @@ let name = "alice"
 ```dune
 (library
  (name mylib)
- (preprocess (pps ppx_message_templates)))
+ (preprocess (pps message-templates-ppx)))
 ```
 
 ### Issue: Need to disable colors in production
 
 **Solution:** Use environment variable:
 ```ocaml
-let colors = 
+let colors =
   match Sys.getenv_opt "NO_COLOR" with
   | Some _ -> false
-  | None -> true
+  | None -> Unix.isatty Unix.stdout
 
 let logger =
   Configuration.create ()
   |> Configuration.write_to_console ~colors ()
-  |> Configuration.create_logger
+  |> Configuration.build
+```
+
+### Issue: Large objects in templates
+
+**Solution:** Use the stringify operator or explicit conversion:
+```ocaml
+(* For display only - uses runtime conversion *)
+let data = [1; 2; 3] in
+let msg, _ = [%template "Data: {$data}"]
+
+(* For JSON output - use explicit conversion *)
+let data_json = `List (List.map (fun x -> `Int x) [1; 2; 3]) in
+Log.information "Data received" [("data", data_json)]
 ```
 
 ---
@@ -310,4 +469,5 @@ let logger =
 
 - **API Documentation**: Run `dune build @doc` to generate odoc
 - **Examples**: See `examples/` directory
-- **Issues**: Report on GitHub
+- **Configuration Guide**: See `CONFIGURATION.md`
+- **Deployment Guide**: See `DEPLOYMENT.md`
