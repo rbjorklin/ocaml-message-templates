@@ -146,6 +146,12 @@ One test file per module:
 - `test_ppx_comprehensive.ml` - All PPX features
 - `test_type_coverage.ml` - Type conversion coverage
 
+### Type Annotation Tests
+- Explicit type annotations in tests (e.g., `let x : int = 42`) are for documentation clarity only
+- PPX cannot use type annotations because it runs before type checking
+- All type conversion tests verify runtime behavior of `generic_to_json`, not compile-time code generation
+- When adding type-specific tests, remember they test the Obj-based runtime converter, not type-specific converters
+
 ### Async Package Tests
 - `message-templates-lwt/test/` - Lwt-specific tests
 - `message-templates-eio/test/` - Eio-specific tests

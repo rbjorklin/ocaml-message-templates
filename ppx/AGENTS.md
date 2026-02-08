@@ -207,6 +207,11 @@ If compile-time type detection is desired, it would require:
 
 For now, all type conversion is done at runtime via `generic_to_json`.
 
+### PPX Dead Code Patterns
+- **Type-specific branches are unreachable**: Pattern matching on `core_type option` in `yojson_of_value` will never match `Some` - the scope analyzer always returns `None`
+- **Scope analyzer limitation**: `scope_from_let_bindings` intentionally does not extract type info because PPX runs before type checking (see `ppx/scope_analyzer.ml` lines 99-106)
+- **Always verify reachability**: When adding compile-time type detection, grep for usages of the type parameter to ensure it's actually being populated
+
 ## Further Reading
 
 - **../README.md** - Feature overview and template syntax
