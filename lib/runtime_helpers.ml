@@ -113,18 +113,55 @@ end
     type annotations. *)
 let generic_to_string (type a) (v : a) : string =
   let module O = Obj in
-  let repr = O.repr v in
-  if O.is_int repr then
-    string_of_int (O.obj repr)
-  else if O.is_block repr then
-    match
-      O.tag repr
-    with
-    | 252 -> (O.obj repr : string)
-    | 253 -> string_of_float (O.obj repr : float)
-    | _ -> "<unknown>"
-  else
-    "<unknown>"
+  (* Recursively convert a list to string representation *)
+  let rec list_to_string lst =
+    let repr = O.repr lst in
+    if O.is_int repr then
+      (* Empty list *)
+      "[]"
+    else if O.is_block repr && O.tag repr = 0 then
+      (* Non-empty list: block with tag 0, containing pair (head, tail) *)
+      let head = O.field repr 0 in
+      let tail = O.field repr 1 in
+      let head_str = generic_to_string_impl head in
+      let tail_str = list_contents_to_string tail in
+      "[" ^ head_str ^ tail_str ^ "]"
+    else
+      "<unknown-list>"
+  and list_contents_to_string lst =
+    let repr = O.repr lst in
+    if O.is_int repr then
+      (* End of list *)
+      ""
+    else if O.is_block repr && O.tag repr = 0 then
+      (* More elements *)
+      let head = O.field repr 0 in
+      let tail = O.field repr 1 in
+      let head_str = generic_to_string_impl head in
+      "; " ^ head_str ^ list_contents_to_string tail
+    else
+      ""
+  and generic_to_string_impl repr =
+    if O.is_int repr then
+      string_of_int (O.obj repr)
+    else if O.is_block repr then
+      match
+        O.tag repr
+      with
+      | 252 -> (O.obj repr : string)
+      | 253 -> string_of_float (O.obj repr : float)
+      | 0 ->
+          (* Could be a list or a tuple - check if it looks like a cons cell *)
+          if O.size repr = 2 then
+            (* Might be a list cons cell, try to convert as list *)
+            list_to_string (O.obj repr)
+          else
+            "<block>"
+      | _ -> "<unknown>"
+    else
+      "<unknown>"
+  in
+  generic_to_string_impl (O.repr v)
 ;;
 
 (** Generic value to JSON conversion. This is a best-effort conversion for
