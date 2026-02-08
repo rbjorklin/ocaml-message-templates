@@ -48,10 +48,19 @@ let write_to_file
     path
     config =
   let sink = Eio_file_sink.create ~rolling ~output_template path in
+  let emit_fn event = Eio_file_sink.emit sink event in
+  (* Wrap emit_fn with level checking *)
+  let wrapped_emit_fn event =
+    match min_level with
+    | Some min_lvl when Level.compare (Log_event.get_level event) min_lvl < 0 ->
+        () (* Skip - event level too low for this sink *)
+    | _ -> emit_fn event
+  in
   let sink_fn =
-    { Eio_sink.emit_fn= (fun event -> Eio_file_sink.emit sink event)
+    { Eio_sink.emit_fn= wrapped_emit_fn
     ; flush_fn= (fun () -> Eio_file_sink.flush sink)
-    ; close_fn= (fun () -> Eio_file_sink.close sink) }
+    ; close_fn= (fun () -> Eio_file_sink.close sink)
+    ; min_level }
   in
   let sink_config = {sink_fn; min_level} in
   {config with sinks= sink_config :: config.sinks}
@@ -71,19 +80,55 @@ let write_to_console
     Eio_console_sink.create ~colors ~stderr_threshold ~output_template ?stdout
       ?stderr ()
   in
+  let emit_fn event = Eio_console_sink.emit sink event in
+  (* Wrap emit_fn with level checking *)
+  let wrapped_emit_fn event =
+    match min_level with
+    | Some min_lvl when Level.compare (Log_event.get_level event) min_lvl < 0 ->
+        () (* Skip - event level too low for this sink *)
+    | _ -> emit_fn event
+  in
   let sink_fn =
-    { Eio_sink.emit_fn= (fun event -> Eio_console_sink.emit sink event)
+    { Eio_sink.emit_fn= wrapped_emit_fn
     ; flush_fn= (fun () -> Eio_console_sink.flush sink)
-    ; close_fn= (fun () -> Eio_console_sink.close sink) }
+    ; close_fn= (fun () -> Eio_console_sink.close sink)
+    ; min_level }
   in
   let sink_config = {sink_fn; min_level} in
   {config with sinks= sink_config :: config.sinks}
 ;;
 
-(** Add a custom Eio sink function *)
-let write_to ?min_level sink_fn config =
-  let sink_config = {sink_fn; min_level} in
-  {config with sinks= sink_config :: config.sinks}
+(** Add a custom Eio sink function with optional minimum level override. If both
+    the sink_fn has a min_level and one is provided here, the more restrictive
+    (higher) level is used. *)
+let write_to ?min_level (sink_config : sink_config) config =
+  let effective_min_level =
+    match (sink_config.min_level, min_level) with
+    | Some sink_level, Some cfg_level ->
+        if Level.compare sink_level cfg_level > 0 then
+          Some sink_level
+        else
+          Some cfg_level
+    | Some level, None -> Some level
+    | None, Some level -> Some level
+    | None, None -> None
+  in
+  (* Wrap emit_fn with level checking *)
+  let wrapped_emit_fn event =
+    match effective_min_level with
+    | Some min_lvl when Level.compare (Log_event.get_level event) min_lvl < 0 ->
+        () (* Skip - event level too low for this sink *)
+    | _ -> sink_config.sink_fn.Eio_sink.emit_fn event
+  in
+  let new_sink_fn =
+    { sink_config.sink_fn with
+      Eio_sink.emit_fn= wrapped_emit_fn
+    ; min_level= effective_min_level }
+  in
+  let new_sink_config =
+    {sink_fn= new_sink_fn; min_level= effective_min_level}
+  in
+  {config with sinks= new_sink_config :: config.sinks}
 ;;
 
 (** Add an enricher function *)
@@ -118,20 +163,15 @@ let filter_by_min_level level config =
 
 (** Create the Eio logger from configuration *)
 let create_logger ?sw config =
-  let filtered_sinks =
-    List.filter_map
-      (fun (sink_config : sink_config) ->
-        match (sink_config.min_level : Level.t option) with
-        | Some sink_min_level ->
-            if Level.compare config.min_level sink_min_level >= 0 then
-              Some sink_config.sink_fn
-            else
-              None
-        | None -> Some sink_config.sink_fn )
+  (* Extract sink functions - per-sink level filtering happens at runtime in
+     Eio_sink.composite_sink, so we pass all sinks through *)
+  let all_sinks =
+    List.map
+      (fun (sink_config : sink_config) -> sink_config.sink_fn)
       config.sinks
   in
   let logger =
-    Eio_logger.create ?sw ~min_level:config.min_level ~sinks:filtered_sinks ()
+    Eio_logger.create ?sw ~min_level:config.min_level ~sinks:all_sinks ()
   in
   let logger =
     List.fold_left

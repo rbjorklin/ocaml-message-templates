@@ -42,3 +42,9 @@
 - Files named `<suite>.<index>.output` contain assertion failure details
 - Use `cat _build/_tests/latest/*.output` to view all recent failures
 - Examine output before assuming your changes broke the test
+
+### Sink Record Creation in Tests
+- Tests manually create `Composite_sink.sink_fn` records to inject test doubles
+- Any new required field in sink_fn breaks all tests creating them
+- Fix pattern: Add `; min_level= None` (or appropriate value) to record
+- Same issue affects examples and benchmarks that create sinks manually

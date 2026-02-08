@@ -92,6 +92,19 @@ Per [OCamlverse runtime docs](https://ocamlverse.net/content/runtime.html):
 - All sinks follow same pattern: create -> wrap in sink_fn -> add to config.sinks
 - Extract early to prevent drift between sink type implementations
 
+### Per-Sink Level Filtering Implementation
+- Per-sink min_level filtering happens at sink creation time, NOT in Composite_sink.emit
+- Logger.write calls emit_fn directly on each sink, bypassing Composite_sink entirely
+- Must wrap emit_fn with level checking during sink creation in configuration.ml
+- Runtime check: `event_level >= sink_min_level`, skip if false
+
+### Sink Type Changes Cascade
+- Adding fields to `Composite_sink.sink_fn` requires updates in:
+  - test/test_sinks.ml, test/test_logger.ml (manual sink_fn creation)
+  - examples/*.ml (manual sink creation in CLEF examples)
+  - benchmarks/benchmark.ml (composite_sink_emit test)
+  - Both Lwt and Eio packages have their own sink_fn types
+
 ## Domain-Local Storage for Multicore Caching
 
 ### Domain.DLS Pattern

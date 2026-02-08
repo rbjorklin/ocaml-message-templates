@@ -16,3 +16,9 @@
 - No code sharing with message-templates-lwt despite similar patterns
 - Async_abstractions module removed - both packages implement patterns independently
 - Eio-specific implementations preferred over generic abstractions
+
+### Eio_sink.sink_fn Type Independence
+- `Eio_sink.sink_fn` is separate from `Composite_sink.sink_fn` in core library
+- Changes to core sink types require corresponding changes here
+- Per-sink min_level filtering: wrap emit_fn with level check at creation
+- Eio uses direct-style (no Lwt.t), but filtering logic is identical

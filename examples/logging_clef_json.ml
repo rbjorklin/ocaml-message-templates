@@ -12,7 +12,8 @@ let () =
     { Composite_sink.emit_fn=
         (fun event -> Json_sink.emit json_sink_instance event)
     ; flush_fn= (fun () -> Json_sink.flush json_sink_instance)
-    ; close_fn= (fun () -> Json_sink.close json_sink_instance) }
+    ; close_fn= (fun () -> Json_sink.close json_sink_instance)
+    ; min_level= None }
   in
 
   (* Configure the logger with JSON output *)

@@ -201,6 +201,65 @@ let test_configuration_chaining () =
   Sys.remove path
 ;;
 
+let test_per_sink_min_level () =
+  (* Create two temp files for different sinks *)
+  let all_logs_path = temp_file () in
+  let errors_only_path = temp_file () in
+
+  (* Configure logger with: - Console/file sink that gets all messages (Debug
+     level) - Error-only sink that gets only Error and Fatal *)
+  let logger =
+    Configuration.create ()
+    |> Configuration.debug
+    |> Configuration.write_to_file all_logs_path
+    |> Configuration.write_to_file ~min_level:Level.Error errors_only_path
+    |> Configuration.create_logger
+  in
+
+  (* Log messages at different levels *)
+  Logger.debug logger "Debug message" [];
+  Logger.information logger "Info message" [];
+  Logger.warning logger "Warning message" [];
+  Logger.error logger "Error message" [];
+  Logger.fatal logger "Fatal message" [];
+
+  (* Flush and close *)
+  Logger.flush logger;
+  Logger.close logger;
+
+  (* Read both files *)
+  let all_logs_content = read_file all_logs_path in
+  let errors_only_content = read_file errors_only_path in
+
+  (* All logs file should have all messages *)
+  check bool "All logs: Debug present" true
+    (contains "Debug message" all_logs_content);
+  check bool "All logs: Info present" true
+    (contains "Info message" all_logs_content);
+  check bool "All logs: Warning present" true
+    (contains "Warning message" all_logs_content);
+  check bool "All logs: Error present" true
+    (contains "Error message" all_logs_content);
+  check bool "All logs: Fatal present" true
+    (contains "Fatal message" all_logs_content);
+
+  (* Errors-only file should have only Error and Fatal *)
+  check bool "Errors only: Debug NOT present" false
+    (contains "Debug message" errors_only_content);
+  check bool "Errors only: Info NOT present" false
+    (contains "Info message" errors_only_content);
+  check bool "Errors only: Warning NOT present" false
+    (contains "Warning message" errors_only_content);
+  check bool "Errors only: Error present" true
+    (contains "Error message" errors_only_content);
+  check bool "Errors only: Fatal present" true
+    (contains "Fatal message" errors_only_content);
+
+  (* Cleanup *)
+  Sys.remove all_logs_path;
+  Sys.remove errors_only_path
+;;
+
 let test_filter_level_filter () =
   (* Test the level filter directly *)
   let event =
@@ -313,7 +372,9 @@ let () =
       , [ test_case "Multiple sinks can be configured" `Quick
             test_configuration_multiple_sinks
         ; test_case "Null sink can be configured" `Quick
-            test_configuration_write_to_null ] )
+            test_configuration_write_to_null
+        ; test_case "Per-sink minimum level filtering works" `Quick
+            test_per_sink_min_level ] )
     ; ( "chaining"
       , [test_case "Complex chaining works" `Quick test_configuration_chaining]
       ) ]

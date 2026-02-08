@@ -9,7 +9,8 @@ let create_file_sink_fn path =
   let sink = File_sink.create path in
   { Composite_sink.emit_fn= (fun event -> File_sink.emit sink event)
   ; flush_fn= (fun () -> File_sink.flush sink)
-  ; close_fn= (fun () -> File_sink.close sink) }
+  ; close_fn= (fun () -> File_sink.close sink)
+  ; min_level= None }
 ;;
 
 let read_file path =

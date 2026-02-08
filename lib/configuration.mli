@@ -17,6 +17,8 @@
 (** Configuration type (opaque) *)
 type t
 
+type sink_config
+
 val create : unit -> t
 (** Create a new configuration with default minimum level (Information) *)
 
@@ -63,7 +65,7 @@ val write_to_console :
 val write_to_null : ?min_level:Level.t -> unit -> t -> t
 (** Add a null sink (discards all events) *)
 
-val write_to : ?min_level:Level.t -> Composite_sink.sink_fn -> t -> t
+val write_to : ?min_level:Level.t -> sink_config -> t -> t
 (** Add a custom sink to the configuration *)
 
 val enrich_with : (Log_event.t -> Log_event.t) -> t -> t

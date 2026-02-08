@@ -25,6 +25,12 @@ Filtering (level/property-based)
 Sinks (Console, File, etc.)
 ```
 
+### Logger Emit Path
+- Logger.write calls emit_fn directly on each sink - does NOT use Composite_sink.emit
+- Composite_sink.emit is for external consumers, not internal Logger use
+- Per-sink filtering must be implemented by wrapping emit_fn at sink creation time
+- Architecture appears layered but Logger bypasses the composition layer for direct sink access
+
 ## Commands
 
 Build: "dune build @install"
