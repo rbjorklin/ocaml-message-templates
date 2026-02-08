@@ -1,6 +1,6 @@
 # OCaml Message Templates
 
-A PPX-based library for Message Templates in OCaml that provides compile-time template validation with automatic variable capture from scope, plus a comprehensive logging infrastructure modeled after Serilog.
+PPX-based library for compile-time validated message templates with structured logging.
 
 ## Features
 
@@ -12,10 +12,11 @@ A PPX-based library for Message Templates in OCaml that provides compile-time te
 - Printf-compatible format specifiers (`:05d`, `.2f`, etc.) and alignment
 - Six log levels with comparison operators
 - Multiple sinks: Console, File (with rolling), JSON, Composite, Null
-- Async logging with non-blocking queue and circuit breaker protection
 - Context tracking with ambient properties and correlation IDs
 - Level-based and property-based filtering
-- Per-sink metrics with latency percentiles
+- Lwt and Eio async logging support
+
+---
 
 ## Installation
 
@@ -52,6 +53,8 @@ opam install message-templates-eio
   unix)
 ```
 
+---
+
 ## Usage
 
 Add the PPX to your dune file:
@@ -78,7 +81,7 @@ let () =
 
   Yojson.Safe.to_string json |> print_endline;
   (* Output: {"@t":"2026-01-31T23:54:42-00:00","@mt":"User {username} logged in from {ip_address}",
-              "@m":"User alice logged in from 192.168.1.1","username":"alice","ip_address":"192.168.1.1"} *)
+               "@m":"User alice logged in from 192.168.1.1","username":"alice","ip_address":"192.168.1.1"} *)
 ```
 
 ### Logging Basics
@@ -95,7 +98,7 @@ let () =
     |> Configuration.minimum_level Level.Information
     |> Configuration.write_to_console ~colors:true ()
     |> Configuration.write_to_file ~rolling:File_sink.Daily "app.log"
-    |> Configuration.build
+    |> Configuration.create_logger
   in
   Log.set_logger logger
 ```
@@ -110,7 +113,7 @@ let process_user user_id =
     (* ... work ... *)
     Log.debug "User {user_id} processed successfully" [("user_id", `Int user_id)]
   with exn ->
-    Log.error ~exn "Failed to process user {user_id}" [("user_id", `Int user_id)]
+    Log.error "Failed to process user {user_id}" [("user_id", `Int user_id)]
 ```
 
 ### Async Logging
@@ -120,6 +123,7 @@ let process_user user_id =
 ```ocaml
 open Message_templates
 open Message_templates_lwt
+open Lwt.Syntax
 
 let main () =
   (* Setup async logger *)
@@ -127,15 +131,11 @@ let main () =
     Configuration.create ()
     |> Configuration.minimum_level Level.Information
     |> Configuration.write_to_console ~colors:true ()
-    |> Configuration.write_to_file ~rolling:Daily "app.log"
     |> Lwt_configuration.create_logger
   in
 
   (* All log methods return unit Lwt.t *)
   let* () = Lwt_logger.information logger "Server starting on port {port}" [("port", `Int 8080)] in
-
-  (* Concurrent logging to multiple sinks *)
-  let* () = Lwt_logger.debug logger "Debug info: {user}" [("user", `String "alice")] in
 
   (* Clean up *)
   Lwt_logger.close logger
@@ -156,7 +156,6 @@ let run ~stdout ~fs =
     Configuration.create ()
     |> Configuration.minimum_level Level.Information
     |> Configuration.write_to_console ~colors:true ()
-    |> Configuration.write_to_file ~rolling:Daily "app.log"
     |> Eio_configuration.create_logger ~sw
   in
 
@@ -164,13 +163,7 @@ let run ~stdout ~fs =
   Eio_logger.information logger "Server starting" [];
 
   (* Fire-and-forget logging - runs in background fiber *)
-  Eio_logger.write_async logger "Background task started" [];
-
-  (* Handle requests *)
-  let handle_request req =
-    Eio_logger.information logger "Request {method} {path}"
-      [("method", `String req.method); ("path", `String req.path)]
-  in
+  Eio_logger.information_async logger "Background task started" [];
 
   (* Your Eio code here *)
   ()
@@ -253,14 +246,6 @@ let logger =
        ~output_template:"{timestamp} [{level}] {message}"
        "logs/app.log"
 
-  (* JSON file output for pure CLEF format *)
-  |> Configuration.write_to
-       (let sink = Json_sink.create "output.json" in
-        Configuration.sink_config
-          { Composite_sink.emit_fn = (fun e -> Json_sink.emit sink e)
-          ; flush_fn = (fun () -> Json_sink.flush sink)
-          ; close_fn = (fun () -> Json_sink.close sink) })
-
   (* Static properties *)
   |> Configuration.enrich_with_property "AppVersion" (`String "1.0.0")
   |> Configuration.enrich_with_property "Environment" (`String "Production")
@@ -268,7 +253,7 @@ let logger =
   (* Filters *)
   |> Configuration.filter_by_min_level Level.Information
 
-  |> Configuration.build
+  |> Configuration.create_logger
 ```
 
 ### Operators
@@ -319,16 +304,7 @@ let msg, _ = [%template "Use {{braces}} for literals"] in
 (* Output: Use {braces} for literals *)
 ```
 
-### Type-Safe Conversions
-
-```ocaml
-open Message_templates.Runtime_helpers.Safe_conversions
-
-let convert = list (pair int string)
-let json = convert [(1, "a"); (2, "b")]
-```
-
-Available converters: `string`, `int`, `float`, `bool`, `int64`, `int32`, `nativeint`, `char`, `unit`, `list`, `array`, `option`, `pair`, `triple`
+---
 
 ## Architecture
 
@@ -361,28 +337,7 @@ Filtering
 Sinks
 ```
 
-**Async:**
-```
-Application
-    |
-    v
-Level Check
-    |
-    v
-Template Expansion (PPX)
-    |
-    v
-Enqueue
-    |
-    v
-Background Thread
-    |
-    v
-Circuit Breaker (optional)
-    |
-    v
-Sinks
-```
+---
 
 ## JSON Output Structure
 
@@ -406,68 +361,7 @@ Log events follow the [CLEF format](https://github.com/serilog/serilog-formattin
 - `@i`: Correlation ID (optional)
 - Additional fields: Template variables and context properties
 
-## Advanced Features
-
-### Metrics and Observability
-
-Track per-sink performance:
-
-```ocaml
-let metrics = Metrics.create () in
-
-(* Record event emission *)
-Metrics.record_event metrics ~sink_id:"file" ~latency_us:1.5;
-
-(* Get sink-specific metrics *)
-match Metrics.get_sink_metrics metrics "file" with
-| Some m ->
-    Printf.printf "Events: %d, Dropped: %d, P95 latency: %.2fμs\n"
-      m.events_total m.events_dropped m.latency_p95_us
-| None -> ()
-
-(* Export as JSON *)
-let json = Metrics.to_json metrics
-```
-
-### Circuit Breaker
-
-Protect against cascade failures:
-
-```ocaml
-let cb = Circuit_breaker.create ~failure_threshold:5 ~reset_timeout_ms:30000 () in
-
-(* Protected call *)
-match Circuit_breaker.call cb (fun () -> risky_operation ()) with
-| Some result -> (* success *)
-| None -> (* circuit open or failed *)
-```
-
-### Async Sink Queue
-
-Non-blocking event queue for high-throughput scenarios:
-
-```ocaml
-let queue = Async_sink_queue.create
-  { default_config with max_queue_size = 10000 }
-  (fun event -> File_sink.emit sink event)
-in
-
-(* Non-blocking enqueue *)
-Async_sink_queue.enqueue queue event;
-
-(* Check queue depth *)
-let depth = Async_sink_queue.get_queue_depth queue in
-
-(* Graceful shutdown *)
-Async_sink_queue.flush queue;
-Async_sink_queue.close queue
-```
-
-### Timestamp Caching
-
-```ocaml
-Timestamp_cache.set_enabled false
-```
+---
 
 ## Performance
 
@@ -486,6 +380,8 @@ PPX JSON Output:      0.334s (2.99M ops/sec)
 
 PPX-generated code has minimal overhead compared to hand-written Printf.
 
+---
+
 ## Testing
 
 Run the test suite:
@@ -495,9 +391,11 @@ dune runtest
 ```
 
 This runs tests across all packages:
-- Core library: Level, Sink, Logger, Configuration, Global log, PPX, Parser, Circuit breaker, Metrics, Async queue tests
+- Core library: Level, Sink, Logger, Configuration, Global log, PPX, Parser, Circuit breaker, Metrics tests
 - Lwt package: Lwt logger and sink tests
 - Eio package: Eio logger and sink tests
+
+---
 
 ## Examples
 
@@ -520,11 +418,9 @@ dune exec examples/logging_advanced.exe
 dune exec examples/logging_ppx.exe
 dune exec examples/logging_clef_ppx.exe
 dune exec examples/logging_clef_json.exe
-
-# Async examples (when available)
-dune exec message-templates-lwt/examples/lwt_example.exe
-dune exec message-templates-eio/examples/eio_example.exe
 ```
+
+---
 
 ## API Reference
 
@@ -554,8 +450,7 @@ dune exec message-templates-eio/examples/eio_example.exe
 ### Reliability
 
 - `Circuit_breaker` - Error recovery
-- `Async_sink_queue` - Non-blocking queue
-- `Metrics` - Per-sink metrics
+- `Metrics` - Per-sink performance tracking
 - `Timestamp_cache` - Timestamp caching
 - `Shutdown` - Graceful shutdown
 
@@ -566,6 +461,8 @@ dune exec message-templates-eio/examples/eio_example.exe
 ### Eio (message-templates-eio)
 
 - `Eio_logger`, `Eio_configuration`, `Eio_file_sink`, `Eio_console_sink`
+
+---
 
 ## Compliance
 
@@ -578,6 +475,8 @@ Implements the [Message Templates specification](https://messagetemplates.org/):
 - Format specifiers: `:format` syntax
 - Alignment specifiers: `,width` syntax
 - CLEF output with `@t`, `@mt`, `@m`, `@l` fields
+
+---
 
 ## License
 

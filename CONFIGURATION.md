@@ -1,6 +1,8 @@
-# Message Templates Configuration Guide
+# Message Templates Configuration
 
 Complete guide to configuring loggers in Message Templates.
+
+---
 
 ## Quick Start
 
@@ -12,7 +14,7 @@ open Message_templates
 let () =
   Configuration.create ()
   |> Configuration.write_to_console ()
-  |> Configuration.build
+  |> Configuration.create_logger
   |> Log.set_logger;
   Log.information "Application started" []
 ```
@@ -26,7 +28,7 @@ let () =
     |> Configuration.information  (* Set minimum level *)
     |> Configuration.write_to_console ~colors:true ()
     |> Configuration.write_to_file ~rolling:File_sink.Daily "app.log"
-    |> Configuration.build
+    |> Configuration.create_logger
   in
   Log.set_logger logger;
   Log.information "Application started" []
@@ -42,7 +44,7 @@ let () =
     |> Configuration.write_to_file ~rolling:File_sink.Hourly "app.log"
     |> Configuration.write_to_file ~rolling:File_sink.Infinite "errors.log"
         ~min_level:Level.Error
-    |> Configuration.build
+    |> Configuration.create_logger
   in
   Log.set_logger logger
 ```
@@ -56,7 +58,7 @@ Configuration.create ()
   |> method1
   |> method2
   |> method3
-  |> Configuration.build
+  |> Configuration.create_logger
 ```
 
 ### Conditional Configuration
@@ -75,7 +77,7 @@ let make_logger ~debug_mode =
   in
   config
   |> Configuration.write_to_file "app.log"
-  |> Configuration.build
+  |> Configuration.create_logger
 ```
 
 ---
@@ -144,15 +146,16 @@ Rolling strategies: `Infinite`, `Daily`, `Hourly`
 
 ```ocaml
 let json_sink_instance = Json_sink.create "output.clef.json" in
-let json_sink =
-  { Composite_sink.emit_fn = (fun event -> Json_sink.emit json_sink_instance event)
-  ; flush_fn = (fun () -> Json_sink.flush json_sink_instance)
-  ; close_fn = (fun () -> Json_sink.close json_sink_instance) }
+let json_sink_config =
+  Configuration.sink_config
+    { Composite_sink.emit_fn = (fun event -> Json_sink.emit json_sink_instance event)
+    ; flush_fn = (fun () -> Json_sink.flush json_sink_instance)
+    ; close_fn = (fun () -> Json_sink.close json_sink_instance) }
 in
 
 Configuration.create ()
-|> Configuration.write_to json_sink
-|> Configuration.build
+|> Configuration.write_to json_sink_config
+|> Configuration.create_logger
 ```
 
 #### Null Sink
@@ -164,15 +167,16 @@ Configuration.write_to_null ()
 #### Custom Sinks
 
 ```ocaml
-let my_custom_sink =
+let my_custom_sink_fn =
   { Composite_sink.emit_fn = (fun event -> ...)
   ; flush_fn = (fun () -> ())
   ; close_fn = (fun () -> ()) }
 in
+let my_sink_config = Configuration.sink_config my_custom_sink_fn in
 
 Configuration.create ()
-|> Configuration.write_to my_custom_sink
-|> Configuration.build
+|> Configuration.write_to my_sink_config
+|> Configuration.create_logger
 ```
 
 #### Multiple Sinks
@@ -182,7 +186,7 @@ Configuration.create ()
 |> Configuration.write_to_console ~colors:true ()
 |> Configuration.write_to_file "app.log"
 |> Configuration.write_to_file "errors.log" ~min_level:Level.Error
-|> Configuration.build
+|> Configuration.create_logger
 ```
 
 Events go to all sinks that pass their filters.
@@ -238,7 +242,7 @@ Configuration.create ()
 |> Configuration.enrich_with_property "version" (`String "1.2.3")
 |> Configuration.enrich_with_property "environment" (`String "production")
 |> Configuration.enrich_with (fun event -> event)
-|> Configuration.build
+|> Configuration.create_logger
 ```
 
 ---
@@ -253,7 +257,7 @@ let dev_logger () =
   |> Configuration.debug
   |> Configuration.write_to_console ~colors:true ()
   |> Configuration.enrich_with_property "env" (`String "dev")
-  |> Configuration.build
+  |> Configuration.create_logger
 ```
 
 ### Production
@@ -272,7 +276,7 @@ let prod_logger () =
        "/var/log/app/errors.log"
   |> Configuration.enrich_with_property "env" (`String "prod")
   |> Configuration.enrich_with_property "hostname" (`String (Unix.gethostname ()))
-  |> Configuration.build
+  |> Configuration.create_logger
 ```
 
 ### Testing
@@ -281,7 +285,7 @@ let prod_logger () =
 let test_logger () =
   Configuration.create ()
   |> Configuration.write_to_null ()
-  |> Configuration.build
+  |> Configuration.create_logger
 ```
 
 ### Staging
@@ -293,7 +297,7 @@ let staging_logger () =
   |> Configuration.write_to_console ()
   |> Configuration.write_to_file "/var/log/app/staging.log"
   |> Configuration.enrich_with_property "env" (`String "staging")
-  |> Configuration.build
+  |> Configuration.create_logger
 ```
 
 ---
@@ -321,7 +325,7 @@ let logger_from_env () =
       | Some path -> Configuration.write_to_file path
       | None -> fun c -> c)
   |> Configuration.enrich_with_property "env" (`String env)
-  |> Configuration.build
+  |> Configuration.create_logger
 ```
 
 ### Per-Module Loggers
@@ -334,7 +338,7 @@ module Auth = struct
     |> Configuration.information
     |> Configuration.write_to_file "auth.log"
     |> Configuration.enrich_with_property "module" (`String "auth")
-    |> Configuration.build
+    |> Configuration.create_logger
 end
 
 module Api = struct
@@ -343,7 +347,7 @@ module Api = struct
     |> Configuration.debug  (* More verbose for API *)
     |> Configuration.write_to_file "api.log"
     |> Configuration.enrich_with_property "module" (`String "api")
-    |> Configuration.build
+    |> Configuration.create_logger
 end
 ```
 
@@ -362,7 +366,7 @@ let make_logger ~user_id ~request_id =
   in
   config
   |> Configuration.write_to_file "app.log"
-  |> Configuration.build
+  |> Configuration.create_logger
 ```
 
 ---
@@ -385,7 +389,7 @@ File: `{timestamp} [{level}] {message}`
 
 ```ocaml
 Configuration.write_to_console
-  ~output_template:"[{level:short}] {message}"
+  ~output_template:"[{level}] {message}"
   ()
 
 Configuration.write_to_file
@@ -452,26 +456,28 @@ val warning : t -> t
 val error : t -> t
 val fatal : t -> t
 
+val sink_config : ?min_level:Level.t -> Composite_sink.sink_fn -> sink_config
+
 val write_to_console :
-  ?min_level:Level.t ->
-  ?colors:bool ->
-  ?stderr_threshold:Level.t ->
-  ?output_template:string ->
-  unit -> t -> t
+     ?min_level:Level.t ->
+     ?colors:bool ->
+     ?stderr_threshold:Level.t ->
+     ?output_template:string ->
+     unit -> t -> t
 
 val write_to_file :
-  ?min_level:Level.t ->
-  ?rolling:File_sink.rolling_interval ->
-  ?output_template:string ->
-  string -> t -> t
+     ?min_level:Level.t ->
+     ?rolling:File_sink.rolling_interval ->
+     ?output_template:string ->
+     string -> t -> t
 
 val write_to_null : ?min_level:Level.t -> unit -> t -> t
-val write_to : ?min_level:Level.t -> Composite_sink.sink_fn -> t -> t
+val write_to : sink_config -> t -> t
 val filter_by : Filter.t -> t -> t
 val filter_by_min_level : Level.t -> t -> t
 val enrich_with_property : string -> Yojson.Safe.t -> t -> t
 val enrich_with : (Log_event.t -> Log_event.t) -> t -> t
-val build : t -> Logger.t
+val create_logger : t -> Logger.t
 ```
 
 ### Filter

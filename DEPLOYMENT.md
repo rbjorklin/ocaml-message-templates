@@ -1,15 +1,6 @@
-# Production Deployment Guide
+# Production Deployment
 
-This guide covers best practices for deploying Message Templates in production environments.
-
-## Table of Contents
-
-- [Pre-Deployment Checklist](#pre-deployment-checklist)
-- [Performance Tuning](#performance-tuning)
-- [Resource Management](#resource-management)
-- [Security Considerations](#security-considerations)
-- [Monitoring & Health Checks](#monitoring--health-checks)
-- [Troubleshooting](#troubleshooting)
+Best practices for deploying Message Templates in production environments.
 
 ---
 
@@ -21,7 +12,7 @@ This guide covers best practices for deploying Message Templates in production e
 - [ ] Enable correlation IDs for distributed tracing
 - [ ] Review PII handling (no passwords/tokens)
 - [ ] Test error scenarios (disk full, permissions)
-- [ ] Configure circuit breakers for async logging
+- [ ] Configure circuit breakers for external sink dependencies
 
 ---
 
@@ -45,8 +36,14 @@ This guide covers best practices for deploying Message Templates in production e
 
 ### Timestamp Caching
 
+Control timestamp caching for precise timing:
+
 ```ocaml
+(* Disable caching for per-event timing precision *)
 Timestamp_cache.set_enabled false
+
+(* Check current state *)
+let caching_active = Timestamp_cache.is_enabled ()
 ```
 
 - With caching: ~50ns per timestamp
@@ -62,9 +59,9 @@ dune exec benchmarks/benchmark.exe -- -ascii -q 0.5
 
 1. Use `Information` or `Warning` minimum level for high volume
 2. Filter at sink level, not logger level
-3. Use async logging for > 1000 events/sec
+3. Use Lwt/Eio async logging for high-throughput scenarios
 4. Avoid large context properties
-5. Use async sink queue for high-volume file logging
+5. Use timestamp caching for better performance
 
 ### Sync vs Async
 
@@ -73,33 +70,42 @@ dune exec benchmarks/benchmark.exe -- -ascii -q 0.5
 let logger =
   Configuration.create ()
   |> Configuration.write_to_file "app.log"
-  |> Configuration.build
+  |> Configuration.create_logger
 ```
 
 Use for: < 100 events/sec, guaranteed durability
 
-**Asynchronous:**
+**Lwt Async:**
 ```ocaml
-let file_sink = File_sink.create "app.log" in
-let queue = Async_sink_queue.create
-  { Async_sink_queue.default_config with
-    max_queue_size = 10000;
-    flush_interval_ms = 100 }
-  (fun event -> File_sink.emit file_sink event)
-in
-let async_sink =
-  { Composite_sink.emit_fn = Async_sink_queue.enqueue queue
-  ; flush_fn = (fun () -> Async_sink_queue.flush queue)
-  ; close_fn = (fun () -> Async_sink_queue.close queue) }
-in
+open Message_templates_lwt
 
-let logger =
-  Configuration.create ()
-  |> Configuration.write_to async_sink
-  |> Configuration.build
+let main () =
+  let logger =
+    Configuration.create ()
+    |> Configuration.write_to_file "app.log"
+    |> Lwt_configuration.create_logger
+  in
+  (* Returns unit Lwt.t - non-blocking *)
+  Lwt_logger.information logger "Message" []
 ```
 
-Use for: > 1000 events/sec, cannot tolerate I/O blocking
+Use for: > 1000 events/sec, Lwt-based applications
+
+**Eio Async:**
+```ocaml
+open Message_templates_eio
+
+let run ~sw =
+  let logger =
+    Configuration.create ()
+    |> Configuration.write_to_file "app.log"
+    |> Eio_configuration.create_logger ~sw
+  in
+  (* Fire-and-forget with _async variants *)
+  Eio_logger.information_async logger "Message" []
+```
+
+Use for: Structured concurrency with OCaml 5.4+
 
 ### Buffer Sizes
 
@@ -149,7 +155,6 @@ Logrotate:
 |-----------|--------|
 | Logger | ~1 KB |
 | Context property | ~100 bytes |
-| Async queue (10k) | ~10 MB |
 | Circuit breaker | ~500 bytes |
 
 ---
@@ -182,7 +187,6 @@ List.iter (fun var ->
   | None -> ()
 ) safe_vars
 ```
-```
 
 ---
 
@@ -203,28 +207,32 @@ let health_check () =
 
 ```ocaml
 let metrics = Metrics.create () in
-Metrics.record_event metrics ~sink_id:"file" ~latency_us:1.5;
+Metrics.record metrics ~sink_id:"file" ~latency_us:1.5;
 
-match Metrics.get_sink_metrics metrics "file" with
+match Metrics.get metrics "file" with
 | Some m ->
-    Printf.printf "Events: %d, Dropped: %d, P95: %.2fμs\n"
-      m.events_total m.events_dropped m.latency_p95_us
+    Printf.printf "Events: %d, Errors: %d\n"
+      m.events m.errors
 | None -> ()
-```
 
-### Async Queue
-
-```ocaml
-let depth = Async_sink_queue.get_queue_depth queue in
-let stats = Async_sink_queue.get_stats queue in
-if not (Async_sink_queue.is_alive queue) then
-  Alert.send "Queue thread died!"
+(* Export as JSON *)
+let json = Metrics.to_json metrics
 ```
 
 ### Circuit Breaker
 
 ```ocaml
-match Circuit_breaker.get_state circuit with
+let cb = Circuit_breaker.create ~failure_threshold:5 ~reset_timeout_ms:30000 () in
+
+match Circuit_breaker.call cb (fun () -> risky_operation ()) with
+| Some result -> (* success *)
+| None -> (* circuit open or failed *)
+```
+
+Monitor circuit state:
+
+```ocaml
+match Circuit_breaker.get_state cb with
 | Closed -> ()  (* Normal *)
 | Open -> Alert.send "Circuit open"
 | Half_open -> ()  (* Testing *)
@@ -234,16 +242,17 @@ match Circuit_breaker.get_state circuit with
 
 ```ocaml
 let json_sink_instance = Json_sink.create "/var/log/app.clef.json" in
-let json_sink =
-  { Composite_sink.emit_fn = (fun event -> Json_sink.emit json_sink_instance event)
-  ; flush_fn = (fun () -> Json_sink.flush json_sink_instance)
-  ; close_fn = (fun () -> Json_sink.close json_sink_instance) }
+let json_sink_config =
+  Configuration.sink_config
+    { Composite_sink.emit_fn = (fun event -> Json_sink.emit json_sink_instance event)
+    ; flush_fn = (fun () -> Json_sink.flush json_sink_instance)
+    ; close_fn = (fun () -> Json_sink.close json_sink_instance) }
 in
 
 let logger =
   Configuration.create ()
-  |> Configuration.write_to json_sink
-  |> Configuration.build
+  |> Configuration.write_to json_sink_config
+  |> Configuration.create_logger
 ```
 
 Query: `jq 'select(.["@l"] == "Error")' /var/log/app.clef.json`
@@ -283,12 +292,11 @@ chmod 755 /var/log
 
 ### Performance Issues
 
+Check circuit breaker state and metrics:
+
 ```ocaml
-match Metrics.get_sink_metrics metrics "file" with
-| Some m when m.events_dropped > 0 ->
-    Printf.printf "Dropped: %d\n" m.events_dropped
-| Some m when m.latency_p95_us > 1000.0 ->
-    Printf.printf "High latency: %.0fμs\n" m.latency_p95_us
+match Circuit_breaker.get_state circuit with
+| Open -> Printf.printf "Circuit open - check sink health\n"
 | _ -> ()
 ```
 
@@ -310,41 +318,26 @@ let production_logger () =
        ()
   |> Configuration.write_to_file
        ~rolling:File_sink.Daily
-       "/var/log/app/app.clef.json"
+       "/var/log/app/app.log"
   |> Configuration.write_to_file
        ~rolling:File_sink.Daily
        ~output_template:"{timestamp} [{level}] {message}"
-       "/var/log/app/app.log"
-  |> Configuration.build
+       ~min_level:Level.Error
+       "/var/log/app/errors.log"
+  |> Configuration.create_logger
 ```
 
-### High-Volume Async
+### High-Volume Lwt
 
 ```ocaml
 let high_volume_logger () =
-  let file_sink = File_sink.create ~rolling:File_sink.Daily "/var/log/app/app.log" in
-  let queue = Async_sink_queue.create
-    { Async_sink_queue.default_config with
-      max_queue_size = 50000;
-      flush_interval_ms = 50;
-      batch_size = 100;
-      back_pressure_threshold = 40000;
-      error_handler = (fun exn -> Printf.eprintf "Log error: %s\n" (Printexc.to_string exn));
-      circuit_breaker = Some (
-        Circuit_breaker.create ~failure_threshold:5 ~reset_timeout_ms:30000 ()
-      )
-    }
-    (fun event -> File_sink.emit file_sink event)
-  in
-  let async_sink =
-    { Composite_sink.emit_fn = Async_sink_queue.enqueue queue
-    ; flush_fn = (fun () -> Async_sink_queue.flush queue)
-    ; close_fn = (fun () -> Async_sink_queue.close queue) }
-  in
   Configuration.create ()
   |> Configuration.warning
-  |> Configuration.write_to async_sink
-  |> Configuration.build
+  |> Configuration.write_to_console ()
+  |> Configuration.write_to_file
+       ~rolling:File_sink.Daily
+       "/var/log/app/app.log"
+  |> Lwt_configuration.create_logger
 ```
 
 ### Emergency
@@ -353,7 +346,26 @@ let high_volume_logger () =
 let null_logger =
   Configuration.create ()
   |> Configuration.write_to_null ()
-  |> Configuration.build
+  |> Configuration.create_logger
 in
 Log.set_logger null_logger
+```
+
+---
+
+## Graceful Shutdown
+
+```ocaml
+(* Flush and close on exit *)
+at_exit (fun () ->
+  Log.close_and_flush ()
+)
+```
+
+Or with explicit cleanup:
+
+```ocaml
+let cleanup () =
+  Log.flush ();
+  Log.close ()
 ```
