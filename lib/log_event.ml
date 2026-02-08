@@ -35,8 +35,7 @@ let create
   ; correlation_id }
 ;;
 
-(** Append an escaped string directly to a buffer for JSON output. Avoids
-    intermediate buffer allocation compared to escape_json_string. *)
+(** Append an escaped string directly to a buffer for JSON output. *)
 let append_escaped_string buf s =
   let len = String.length s in
   for i = 0 to len - 1 do
@@ -51,13 +50,6 @@ let append_escaped_string buf s =
     | c when Char.code c < 0x20 -> Printf.bprintf buf "\\u%04x" (Char.code c)
     | c -> Buffer.add_char buf c
   done
-;;
-
-(** Escape a string for JSON output (kept for backward compatibility) *)
-let escape_json_string s =
-  let buf = Buffer.create (String.length s + 10) in
-  append_escaped_string buf s;
-  Buffer.contents buf
 ;;
 
 (** Append a JSON value to a buffer *)
