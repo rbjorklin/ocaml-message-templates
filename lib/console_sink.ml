@@ -9,9 +9,6 @@ type t =
 (** Default console output template *)
 let default_template = "[{timestamp} {level}] {message}"
 
-(** Format a timestamp for display *)
-let format_timestamp (tm : Ptime.t) = Ptime.to_rfc3339 tm
-
 (** Get color code for level *)
 let level_color = function
   | Level.Verbose -> "\027[90m" (* Dark gray *)
@@ -35,17 +32,8 @@ let colorize level use_colors str =
 
 (** Simple template formatting *)
 let format_output t (event : Log_event.t) =
-  let timestamp_str = format_timestamp (Log_event.get_timestamp event) in
   let level_str = Level.to_short_string (Log_event.get_level event) in
-  let message_str = Log_event.get_rendered_message event in
-
-  (* Replace template placeholders *)
-  let result = t.output_template in
-  let result =
-    Str.global_replace (Str.regexp "{timestamp}") timestamp_str result
-  in
-  let result = Str.global_replace (Str.regexp "{level}") level_str result in
-  let result = Str.global_replace (Str.regexp "{message}") message_str result in
+  let result = Runtime_helpers.format_sink_template t.output_template event in
 
   (* Apply color to the level indicator *)
   if t.use_colors then

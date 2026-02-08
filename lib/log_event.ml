@@ -1,13 +1,13 @@
 (** Log event type - immutable record representing a single log entry *)
 
 type t =
-  { timestamp: Ptime.t (* Event timestamp *)
-  ; level: Level.t (* Severity level *)
-  ; message_template: string (* Original template *)
-  ; rendered_message: string (* Formatted message *)
-  ; properties: (string * Yojson.Safe.t) list (* Structured properties *)
-  ; exception_info: exn option (* Optional exception *)
-  ; correlation_id: string option (* Optional correlation ID *) }
+  { timestamp: Ptime.t
+  ; level: Level.t
+  ; message_template: string
+  ; rendered_message: string
+  ; properties: (string * Yojson.Safe.t) list
+  ; exception_info: exn option
+  ; correlation_id: string option }
 
 (** Create a new log event *)
 let create
@@ -36,23 +36,6 @@ let create
   ; properties
   ; exception_info
   ; correlation_id }
-;;
-
-(** Convert log event to Yojson for output *)
-let to_yojson event =
-  let base_props =
-    [ ("@t", `String (Ptime.to_rfc3339 event.timestamp))
-    ; ("@mt", `String event.message_template)
-    ; ("@l", `String (Level.to_string event.level))
-    ; ("@m", `String event.rendered_message) ]
-  in
-  let with_correlation =
-    match event.correlation_id with
-    | None -> base_props
-    | Some id -> ("CorrelationId", `String id) :: base_props
-  in
-  let props = with_correlation @ event.properties in
-  `Assoc props
 ;;
 
 (** Escape a string for JSON output *)
@@ -125,9 +108,8 @@ let append_property buf (key, value) =
   append_json_value buf value
 ;;
 
-(** Optimized direct JSON string generation. This builds the JSON string
-    directly using a Buffer, avoiding intermediate Yojson.Safe.t structures and
-    allocations. *)
+(** Convert log event to JSON string. This builds the JSON string directly using
+    a Buffer, avoiding intermediate Yojson.Safe.t structures and allocations. *)
 let to_json_string event =
   let buf = Buffer.create 512 in
   Buffer.add_char buf '{';
@@ -169,23 +151,17 @@ let to_json_string event =
   Buffer.contents buf
 ;;
 
-(** Get the timestamp *)
+(** Field accessors *)
 let get_timestamp event = event.timestamp
 
-(** Get the level *)
 let get_level event = event.level
 
-(** Get the message template *)
 let get_message_template event = event.message_template
 
-(** Get the rendered message *)
 let get_rendered_message event = event.rendered_message
 
-(** Get the properties *)
 let get_properties event = event.properties
 
-(** Get exception info if present *)
 let get_exception event = event.exception_info
 
-(** Get correlation ID if present *)
 let get_correlation_id event = event.correlation_id

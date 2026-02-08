@@ -63,26 +63,18 @@ let json_to_string = function
 
 (** Render a template by replacing {var} placeholders with values from properties *)
 let render_template template properties =
-  let result = ref template in
-  List.iter
-    (fun (name, value) ->
+  List.fold_left
+    (fun acc (name, value) ->
       let placeholder = "{" ^ name ^ "}" in
       let value_str = json_to_string value in
-      result :=
-        Str.global_replace (Str.regexp_string placeholder) value_str !result )
-    properties;
-  !result
+      Str.global_replace (Str.regexp_string placeholder) value_str acc )
+    template properties
 ;;
 
-(** Safe conversion using polymorphic comparison and type-specific functions.
+(** Safe conversion using explicit type witnesses.
 
-    This module provides a safer alternative to the Obj-based runtime type
-    detection. It uses a combination of: 1. Type-specific conversion functions
-    for known types 2. Polymorphic comparison for basic type detection 3.
-    Explicit type witnesses passed by caller
-
-    Note: This is less precise than Obj but much safer and doesn't rely on
-    compiler implementation details. *)
+    This module provides type-specific conversion functions. For best results,
+    use explicit type annotations in your templates. *)
 module Safe_conversions = struct
   type 'a t = 'a -> Yojson.Safe.t
 
@@ -115,41 +107,11 @@ module Safe_conversions = struct
   let option : 'a. 'a t -> 'a option t = fun f -> make (option_to_json f)
 end
 
-(** Recursively convert an Obj.t to string representation *)
-let rec obj_to_string (obj : Obj.t) : string =
-  let module O = Obj in
-  if O.is_int obj then
-    string_of_int (O.obj obj)
-  else if O.is_block obj then
-    match
-      O.tag obj
-    with
-    | 252 -> (O.obj obj : string)
-    | 253 -> string_of_float (O.obj obj : float)
-    | 0 ->
-        (* Likely a cons cell - try to process as list *)
-        let size = O.size obj in
-        if size = 2 then
-          let hd = O.field obj 0 in
-          let tl = O.field obj 1 in
-          if O.is_int tl && (O.obj tl : int) = 0 then
-            "[" ^ obj_to_string hd ^ "]"
-          else
-            "[" ^ obj_to_string hd ^ "; " ^ obj_to_string tl ^ "]"
-        else
-          let elems =
-            Array.init size (fun i -> obj_to_string (O.field obj i))
-          in
-          "[" ^ String.concat "; " (Array.to_list elems) ^ "]"
-    | _ -> "<unknown>"
-  else
-    "<unknown>"
-;;
-
-(** Convert a value of unknown type to string. This uses the deprecated Obj
-    module but is wrapped for safety. For production use, prefer explicit type
-    annotations. *)
-let any_to_string (type a) (v : a) : string =
+(** Generic value to string conversion using Obj module. This is used as a
+    fallback when type information is not available at compile time. NOTE: This
+    uses Obj for runtime type inspection. For production use, prefer explicit
+    type annotations. *)
+let generic_to_string (type a) (v : a) : string =
   let module O = Obj in
   let repr = O.repr v in
   if O.is_int repr then
@@ -160,48 +122,14 @@ let any_to_string (type a) (v : a) : string =
     with
     | 252 -> (O.obj repr : string)
     | 253 -> string_of_float (O.obj repr : float)
-    | 0 ->
-        (* Tag 0 often indicates a list or tuple structure *)
-        let size = O.size repr in
-        if size = 0 then
-          "()"
-        else if
-          size = 2 && (O.is_int (O.field repr 1) || O.tag (O.field repr 1) = 0)
-        then
-          (* Potentially a cons cell - format as list *)
-          let rec list_to_string obj =
-            if O.is_int obj then
-              if (O.obj obj : int) = 0 then
-                ""
-              else
-                "; <non-list>"
-            else if O.tag obj = 0 && O.size obj = 2 then
-              let hd = obj_to_string (O.field obj 0) in
-              let tl = O.field obj 1 in
-              if O.is_int tl && (O.obj tl : int) = 0 then
-                hd
-              else
-                hd ^ "; " ^ list_to_string tl
-            else
-              "; <non-list>"
-          in
-          "[" ^ list_to_string repr ^ "]"
-        else
-          (* Regular tuple or other structure *)
-          let elems =
-            Array.init size (fun i -> obj_to_string (O.field repr i))
-          in
-          "[" ^ String.concat "; " (Array.to_list elems) ^ "]"
-    | _ -> "<unknown type: use explicit type annotation>"
+    | _ -> "<unknown>"
   else
-    "<unknown type: use explicit type annotation>"
+    "<unknown>"
 ;;
 
-(** Convert a value of unknown type to JSON. This uses the Obj module for
-    runtime type detection. For best results, provide explicit type annotations
-    in templates. This function is used by the PPX as a fallback when type
-    information is not available at compile time. *)
-let any_to_json (type a) (v : a) : Yojson.Safe.t =
+(** Generic value to JSON conversion. This is a best-effort conversion for
+    unknown types. *)
+let generic_to_json (type a) (v : a) : Yojson.Safe.t =
   let module O = Obj in
   let repr = O.repr v in
   if O.is_int repr then
@@ -212,14 +140,22 @@ let any_to_json (type a) (v : a) : Yojson.Safe.t =
     with
     | 252 -> `String (O.obj repr : string)
     | 253 -> `Float (O.obj repr : float)
-    | _ -> `String (any_to_string v)
+    | _ -> `String (generic_to_string v)
   else
     `String "<unknown>"
 ;;
 
-(** These functions are used for runtime type-agnostic conversion. For new code,
-    prefer explicit type annotations for better performance and compile-time
-    guarantees. *)
-let to_string : 'a. 'a -> string = fun v -> any_to_string v
+(** Format a timestamp for display *)
+let format_timestamp tm = Ptime.to_rfc3339 tm
 
-let to_json : 'a. 'a -> Yojson.Safe.t = fun v -> any_to_json v
+(** Format a template string for sink output.
+    Replaces {timestamp}, {level}, and {message} placeholders. *)
+let format_sink_template template event =
+  let timestamp_str = format_timestamp (Log_event.get_timestamp event) in
+  let level_str = Level.to_short_string (Log_event.get_level event) in
+  let message_str = Log_event.get_rendered_message event in
+  template
+  |> Str.global_replace (Str.regexp "{timestamp}") timestamp_str
+  |> Str.global_replace (Str.regexp "{level}") level_str
+  |> Str.global_replace (Str.regexp "{message}") message_str
+;;

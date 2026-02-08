@@ -5,19 +5,13 @@ type state =
   | Open
   | Half_open
 
-type stats =
-  { mutable failure_count: int
-  ; mutable success_count: int
-  ; mutable last_failure_time: float option }
-
 type t =
   { mutable state: state
   ; mutable failure_count: int
   ; failure_threshold: int
   ; reset_timeout_ms: int
   ; mutable last_failure_time: float
-  ; lock: Mutex.t
-  ; stats: stats }
+  ; lock: Mutex.t }
 
 let get_time_ms () = Unix.gettimeofday () *. 1000.0
 
@@ -31,8 +25,7 @@ let create ~failure_threshold ~reset_timeout_ms () =
   ; failure_threshold
   ; reset_timeout_ms
   ; last_failure_time= 0.0
-  ; lock= Mutex.create ()
-  ; stats= {failure_count= 0; success_count= 0; last_failure_time= None} }
+  ; lock= Mutex.create () }
 ;;
 
 let get_state t =
@@ -51,7 +44,6 @@ let get_state t =
 
 let record_success t =
   t.failure_count <- 0;
-  t.stats.success_count <- t.stats.success_count + 1;
   if t.state = Half_open then
     t.state <- Closed
 ;;
@@ -59,8 +51,6 @@ let record_success t =
 let record_failure t =
   t.failure_count <- t.failure_count + 1;
   t.last_failure_time <- get_time_ms ();
-  t.stats.failure_count <- t.stats.failure_count + 1;
-  t.stats.last_failure_time <- Some t.last_failure_time;
   if t.failure_count >= t.failure_threshold then
     t.state <- Open
 ;;
@@ -75,7 +65,6 @@ let call t f =
         t.state <- Half_open );
 
   let can_attempt = t.state <> Open in
-  let _is_half_open = t.state = Half_open in
 
   if not can_attempt then (
     Mutex.unlock t.lock; None )
@@ -93,16 +82,13 @@ let reset t =
   Mutex.lock t.lock;
   t.state <- Closed;
   t.failure_count <- 0;
-  t.stats.failure_count <- 0;
   Mutex.unlock t.lock
 ;;
 
+(** Simple stats as a tuple: (failure_count, success_count, last_failure_time)
+*)
 let get_stats t =
   Mutex.lock t.lock;
-  let result =
-    { failure_count= t.stats.failure_count
-    ; success_count= t.stats.success_count
-    ; last_failure_time= t.stats.last_failure_time }
-  in
+  let result = (t.failure_count, t.state, t.last_failure_time) in
   Mutex.unlock t.lock; result
 ;;

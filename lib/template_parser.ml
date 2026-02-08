@@ -46,29 +46,8 @@ let escaped_brace =
   string "{{" *> return (Text "{") <|> string "}}" *> return (Text "}")
 ;;
 
-(* Text content: any chars except '{' and sequences of single '}' not followed
-   by '}' *)
-let text =
-  let rec text_parts acc =
-    peek_char
-    >>= function
-    | Some '{' -> return (Text (String.concat "" (List.rev acc)))
-    | Some '}' ->
-        (* Check if this is }} or just a single } *)
-        peek_string 2
-        >>= fun s ->
-        if s = "}}" then
-          (* This is an escaped brace - stop here so escaped_brace can handle
-             it *)
-          return (Text (String.concat "" (List.rev acc)))
-        else
-          (* Single } - consume it and continue *)
-          advance 1 >>= fun () -> text_parts ("}" :: acc)
-    | Some c -> advance 1 >>= fun () -> text_parts (String.make 1 c :: acc)
-    | None -> return (Text (String.concat "" (List.rev acc)))
-  in
-  take_while1 (fun c -> c <> '{' && c <> '}') >>= fun s -> text_parts [s]
-;;
+(* Text content: any chars except '{' and '}' *)
+let text = take_while1 (fun c -> c <> '{' && c <> '}') >>| fun s -> Text s
 
 (* Template: sequence of text, escaped braces, and holes *)
 let template = many (text <|> escaped_brace <|> hole)

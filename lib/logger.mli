@@ -56,23 +56,62 @@ module type FILTER = sig
   (** Return true if the event should be included *)
 end
 
-(** Logger implementation type *)
-type logger_impl =
-  { min_level: Level.t
-  ; sinks: Composite_sink.t
-  ; enrichers: (Log_event.t -> Log_event.t) list
-  ; filters: (Log_event.t -> bool) list
-  ; context_properties: (string * Yojson.Safe.t) list
-  ; source: string option }
+(** Logger type - opaque *)
+type t
 
-(** Include the Logger module that satisfies the S signature *)
-include S with type t = logger_impl
+(** {2 Core Functions} *)
 
-val create : min_level:Level.t -> sinks:Composite_sink.t -> t
+val create : min_level:Level.t -> sinks:Composite_sink.sink_fn list -> t
 (** Create a logger with minimum level and sinks *)
 
+val write :
+  t -> ?exn:exn -> Level.t -> string -> (string * Yojson.Safe.t) list -> unit
+(** Core write method *)
+
+val is_enabled : t -> Level.t -> bool
+(** Check if a level is enabled *)
+
+(** {2 Level-specific Methods} *)
+
+val verbose : t -> ?exn:exn -> string -> (string * Yojson.Safe.t) list -> unit
+
+val debug : t -> ?exn:exn -> string -> (string * Yojson.Safe.t) list -> unit
+
+val information :
+  t -> ?exn:exn -> string -> (string * Yojson.Safe.t) list -> unit
+
+val warning : t -> ?exn:exn -> string -> (string * Yojson.Safe.t) list -> unit
+
+val error : t -> ?exn:exn -> string -> (string * Yojson.Safe.t) list -> unit
+
+val fatal : t -> ?exn:exn -> string -> (string * Yojson.Safe.t) list -> unit
+
+(** {2 Context and Enrichment} *)
+
+val for_context : t -> string -> Yojson.Safe.t -> t
+(** Create a contextual logger with additional property *)
+
+val with_enricher : t -> (Log_event.t -> Log_event.t) -> t
+(** Add an enricher function *)
+
+val for_source : t -> string -> t
+(** Create a sub-logger for a specific source *)
+
+(** {2 Lifecycle} *)
+
+val flush : t -> unit
+(** Flush all sinks *)
+
+val close : t -> unit
+(** Close all sinks *)
+
+(** {2 Helper Functions} *)
+
 val add_property : t -> string -> Yojson.Safe.t -> t
-(** Helper to add a property enricher *)
+(** Helper to add a property enricher - alias for for_context *)
 
 val add_min_level_filter : t -> Level.t -> t
-(** Helper to add a level filter *)
+(** Helper to add a minimum level filter *)
+
+val add_filter : t -> (Log_event.t -> bool) -> t
+(** Add a custom filter function *)

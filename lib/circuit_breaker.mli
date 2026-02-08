@@ -25,12 +25,6 @@ type state =
   | Open
   | Half_open
 
-(** Statistics about circuit breaker operation *)
-type stats =
-  { mutable failure_count: int
-  ; mutable success_count: int
-  ; mutable last_failure_time: float option }
-
 (** Circuit breaker (opaque) *)
 type t
 
@@ -57,7 +51,9 @@ val reset : t -> unit
 (** Forces circuit back to Closed state.
     @param t The circuit breaker *)
 
-(** Get failure statistics *)
-val get_stats : t -> stats
+(** Get failure statistics as (failure_count, current_state, last_failure_time)
+*)
+val get_stats : t -> int * state * float
 (** @param t The circuit breaker
-    @return Statistics about recent calls *)
+    @return Statistics tuple: (failure_count, current_state, last_failure_time)
+*)

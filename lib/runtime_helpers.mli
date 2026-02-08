@@ -119,25 +119,23 @@ module Safe_conversions : sig
   val option : 'a t -> 'a option t
 end
 
-(** {2 Runtime Type-Agnostic Conversions}
+(** {2 Generic Conversions (Fallback)} *)
 
-    These functions use the Obj module for runtime type inspection. They are
-    primarily used by the PPX as a fallback when type information is not
-    available at compile time. For new code, prefer explicit type annotations
-    and the Safe_conversions module. *)
+val generic_to_string : 'a -> string
+(** Generic value to string conversion using Obj module. This is used as a
+    fallback when type information is not available at compile time. NOTE: Uses
+    Obj for runtime type inspection. For production use, prefer explicit type
+    annotations. *)
 
-val any_to_string : 'a -> string
-(** Convert a value of unknown type to string (uses Obj module for runtime type
-    detection). Use explicit type annotations when possible. *)
+val generic_to_json : 'a -> Yojson.Safe.t
+(** Generic value to JSON conversion. This is a best-effort conversion for
+    unknown types. *)
 
-val any_to_json : 'a -> Yojson.Safe.t
-(** Convert a value of unknown type to JSON (uses Obj module for runtime type
-    detection). Use explicit type annotations when possible. This is the primary
-    fallback used by the PPX when compile-time type information is unavailable.
-*)
+(** {2 Sink Formatting} *)
 
-val to_string : 'a -> string
-(** Alias for any_to_string *)
+val format_timestamp : Ptime.t -> string
+(** Format a timestamp for display as RFC3339 *)
 
-val to_json : 'a -> Yojson.Safe.t
-(** Alias for any_to_json *)
+val format_sink_template : string -> Log_event.t -> string
+(** Format a template string for sink output.
+    Replaces {timestamp}, {level}, and {message} placeholders. *)

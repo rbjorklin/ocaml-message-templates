@@ -49,8 +49,7 @@ let write_to_file
     ; flush_fn= (fun () -> File_sink.flush file_sink)
     ; close_fn= (fun () -> File_sink.close file_sink) }
   in
-  let sink_config = {sink_fn; min_level} in
-  {config with sinks= sink_config :: config.sinks}
+  {config with sinks= {sink_fn; min_level} :: config.sinks}
 ;;
 
 (** Add a console sink with optional minimum level override *)
@@ -69,8 +68,7 @@ let write_to_console
     ; flush_fn= (fun () -> Console_sink.flush console_sink)
     ; close_fn= (fun () -> Console_sink.close console_sink) }
   in
-  let sink_config = {sink_fn; min_level} in
-  {config with sinks= sink_config :: config.sinks}
+  {config with sinks= {sink_fn; min_level} :: config.sinks}
 ;;
 
 (** Add a null sink (discards all events) *)
@@ -81,8 +79,7 @@ let write_to_null ?min_level () config =
     ; flush_fn= (fun () -> Null_sink.flush null_sink)
     ; close_fn= (fun () -> Null_sink.close null_sink) }
   in
-  let sink_config = {sink_fn; min_level} in
-  {config with sinks= sink_config :: config.sinks}
+  {config with sinks= {sink_fn; min_level} :: config.sinks}
 ;;
 
 (** Add a custom sink function *)
@@ -153,7 +150,9 @@ let create_logger config =
 
   (* Add filters *)
   let logger =
-    {logger with Logger.filters= config.filters @ logger.Logger.filters}
+    List.fold_left
+      (fun log filter -> Logger.add_filter log filter)
+      logger config.filters
   in
 
   (* Add context properties *)

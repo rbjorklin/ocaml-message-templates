@@ -28,39 +28,6 @@ let rec find_variable scope var_name =
     | outer :: _ -> find_variable outer var_name )
 ;;
 
-(** Calculate edit distance between two strings (Levenshtein distance) *)
-let edit_distance s1 s2 =
-  let len1 = String.length s1 in
-  let len2 = String.length s2 in
-  if len1 = 0 then
-    len2
-  else if len2 = 0 then
-    len1
-  else
-    let matrix = Array.make_matrix (len1 + 1) (len2 + 1) 0 in
-    for i = 0 to len1 do
-      matrix.(i).(0) <- i
-    done;
-    for j = 0 to len2 do
-      matrix.(0).(j) <- j
-    done;
-    for i = 1 to len1 do
-      for j = 1 to len2 do
-        let cost =
-          if s1.[i - 1] = s2.[j - 1] then
-            0
-          else
-            1
-        in
-        matrix.(i).(j) <-
-          min
-            (min (matrix.(i - 1).(j) + 1) (matrix.(i).(j - 1) + 1))
-            (matrix.(i - 1).(j - 1) + cost)
-      done
-    done;
-    matrix.(len1).(len2)
-;;
-
 (** Get all variable names in scope *)
 let rec get_all_variables scope =
   let current = List.map fst scope.bindings in
@@ -69,15 +36,18 @@ let rec get_all_variables scope =
   | outer :: _ -> current @ get_all_variables outer
 ;;
 
-(** Find similar variable names (suggestions) *)
+(** Simple suggestion function: find variables that share a prefix *)
 let find_suggestions var_name available =
-  let scored =
-    List.map (fun name -> (name, edit_distance var_name name)) available
-  in
-  let sorted = List.sort (fun (_, d1) (_, d2) -> compare d1 d2) scored in
-  List.filter (fun (_, d) -> d <= 3) sorted
-  |> List.map fst
-  |> List.filter (fun n -> n <> var_name)
+  let prefix_len = min 2 (String.length var_name) in
+  if prefix_len = 0 then
+    []
+  else
+    let prefix = String.sub var_name 0 prefix_len in
+    available
+    |> List.filter (fun name ->
+        name <> var_name && String.starts_with ~prefix name )
+    |> List.sort String.compare
+    |> fun lst -> List.take (min 3 (List.length lst)) lst
 ;;
 
 (** Format variable list for error message *)

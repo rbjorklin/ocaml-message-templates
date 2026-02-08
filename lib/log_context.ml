@@ -25,37 +25,26 @@ let clear () = context_stack := []
 (** Execute function with temporary property (auto-pops on exit) *)
 let with_property name value f =
   push_property name value;
-  try
-    let result = f () in
-    pop_property (); result
-  with e -> pop_property (); raise e
+  Fun.protect ~finally:pop_property f
 ;;
 
 (** Execute function with multiple temporary properties *)
 let with_properties properties f =
   List.iter (fun (name, value) -> push_property name value) properties;
-  try
-    let result = f () in
-    List.iter (fun _ -> pop_property ()) properties;
-    result
-  with e ->
-    List.iter (fun _ -> pop_property ()) properties;
-    raise e
+  Fun.protect
+    ~finally:(fun () -> List.iter (fun _ -> pop_property ()) properties)
+    f
 ;;
 
 (** Create a scope that clears context on exit *)
 let with_scope f =
   let previous = !context_stack in
   let previous_correlation = !correlation_id_stack in
-  try
-    let result = f () in
-    context_stack := previous;
-    correlation_id_stack := previous_correlation;
-    result
-  with e ->
-    context_stack := previous;
-    correlation_id_stack := previous_correlation;
-    raise e
+  Fun.protect
+    ~finally:(fun () ->
+      context_stack := previous;
+      correlation_id_stack := previous_correlation )
+    f
 ;;
 
 (** Generate a new correlation ID (UUID-like format) *)
@@ -89,10 +78,7 @@ let get_correlation_id () =
 (** Execute function with a correlation ID (auto-pops on exit) *)
 let with_correlation_id id f =
   push_correlation_id id;
-  try
-    let result = f () in
-    pop_correlation_id (); result
-  with e -> pop_correlation_id (); raise e
+  Fun.protect ~finally:pop_correlation_id f
 ;;
 
 (** Execute function with an auto-generated correlation ID *)

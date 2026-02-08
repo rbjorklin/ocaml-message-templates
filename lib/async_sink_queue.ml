@@ -1,11 +1,13 @@
-(** Non-blocking event queue for async sink batching *)
+(** Non-blocking event queue for async sink batching with circuit breaker
+    support *)
 
 type config =
   { max_queue_size: int
   ; flush_interval_ms: int
   ; batch_size: int
   ; back_pressure_threshold: int
-  ; error_handler: exn -> unit }
+  ; error_handler: exn -> unit
+  ; circuit_breaker: Circuit_breaker.t option }
 
 let default_config =
   { max_queue_size= 1000
@@ -14,7 +16,7 @@ let default_config =
   ; back_pressure_threshold= 800
   ; error_handler=
       (fun exn -> Printf.eprintf "Queue error: %s\n" (Printexc.to_string exn))
-  }
+  ; circuit_breaker= None }
 ;;
 
 (** Statistics record *)
@@ -36,6 +38,22 @@ type t =
   ; mutable shutdown: bool
   ; mutable stats: stats
   ; sink_fn: Log_event.t -> unit (* Underlying sink *) }
+
+(** Emit an event with circuit breaker protection *)
+let emit_with_circuit_breaker t event =
+  match t.config.circuit_breaker with
+  | None ->
+      (* No circuit breaker: emit directly *)
+      t.sink_fn event;
+      t.stats.total_emitted <- t.stats.total_emitted + 1
+  | Some cb -> (
+    (* Use circuit breaker to protect the sink *)
+    match Circuit_breaker.call cb (fun () -> t.sink_fn event) with
+    | Some () -> t.stats.total_emitted <- t.stats.total_emitted + 1
+    | None ->
+        (* Circuit breaker is open: count as dropped *)
+        t.stats.total_dropped <- t.stats.total_dropped + 1 )
+;;
 
 (** Flush all queued events *)
 let do_flush t =
@@ -64,9 +82,7 @@ let do_flush t =
       (* Emit outside the lock *)
       List.iter
         (fun event ->
-          try
-            t.sink_fn event;
-            t.stats.total_emitted <- t.stats.total_emitted + 1
+          try emit_with_circuit_breaker t event
           with exn ->
             t.config.error_handler exn;
             t.stats.total_errors <- t.stats.total_errors + 1 )
@@ -223,4 +239,12 @@ let create config sink_fn =
   in
   t.background_thread <- Some thread;
   t
+;;
+
+(** Create a queue with circuit breaker protection *)
+let create_with_circuit_breaker config sink_fn =
+  let cb =
+    Circuit_breaker.create ~failure_threshold:5 ~reset_timeout_ms:5000 ()
+  in
+  create {config with circuit_breaker= Some cb} sink_fn
 ;;

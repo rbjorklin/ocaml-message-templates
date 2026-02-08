@@ -179,6 +179,9 @@ let add_min_level_filter t min_level =
   {t with filters= filter :: t.filters}
 ;;
 
+(** Add a custom filter function *)
+let add_filter t filter = {t with filters= filter :: t.filters}
+
 (** Flush all sinks *)
 let flush t = List.iter (fun sink -> sink.Composite_sink.flush_fn ()) t.sinks
 

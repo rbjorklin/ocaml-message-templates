@@ -61,11 +61,9 @@ let rec yojson_of_value ~loc (expr : expression) (ty : core_type option) =
         | None -> `Null
         | Some x -> [%e elem_converter]]
   | _ ->
-      (* Fallback: use runtime helper for backward compatibility. Note: When
-         type information is not available at compile time, we use runtime type
-         detection. For best results, use explicit type annotations in your
-         templates. *)
-      [%expr Message_templates.Runtime_helpers.any_to_json [%e expr]]
+      (* Fallback: use generic conversion for unknown types. For best results,
+         use explicit type annotations in your templates. *)
+      [%expr Message_templates.Runtime_helpers.generic_to_json [%e expr]]
 ;;
 
 (** Apply operator-specific transformations *)
@@ -140,7 +138,7 @@ let rec build_string_render ~loc parts scope =
       match h.operator with
       | Stringify ->
           [%expr
-            Message_templates.Runtime_helpers.any_to_string
+            Message_templates.Runtime_helpers.generic_to_string
               [%e evar ~loc h.name]]
       | _ -> evar ~loc h.name
     in
@@ -187,18 +185,9 @@ and build_buffer_render ~loc parts _scope =
         | Text s -> [%expr Buffer.add_string [%e buf_var] [%e estring ~loc s]]
         | Hole h ->
             let var = evar ~loc h.name in
-            let expr =
-              match h.operator with
-              | Stringify ->
-                  [%expr
-                    Buffer.add_string [%e buf_var]
-                      (Message_templates.Runtime_helpers.any_to_string [%e var])]
-              | _ ->
-                  [%expr
-                    Buffer.add_string [%e buf_var]
-                      (Message_templates.Runtime_helpers.any_to_string [%e var])]
-            in
-            expr )
+            [%expr
+              Buffer.add_string [%e buf_var]
+                (Message_templates.Runtime_helpers.generic_to_string [%e var])] )
       parts
   in
 
@@ -228,7 +217,7 @@ and build_printf_render ~loc parts _scope =
               match h.operator with
               | Stringify ->
                   [%expr
-                    Message_templates.Runtime_helpers.any_to_string [%e var]]
+                    Message_templates.Runtime_helpers.generic_to_string [%e var]]
               | _ -> var
             in
             Some expr )

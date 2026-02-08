@@ -1,4 +1,5 @@
-(** Non-blocking event queue for async sink batching
+(** Non-blocking event queue for async sink batching with circuit breaker
+    support
 
     This module provides a queue-based wrapper around synchronous sinks,
     allowing events to be enqueued non-blockingly and flushed asynchronously in
@@ -27,10 +28,12 @@ type config =
   ; flush_interval_ms: int  (** Milliseconds between background flushes *)
   ; batch_size: int  (** Events to flush per batch *)
   ; back_pressure_threshold: int  (** Warn if queue depth exceeds this *)
-  ; error_handler: exn -> unit  (** Called when sink emit fails *) }
+  ; error_handler: exn -> unit  (** Called when sink emit fails *)
+  ; circuit_breaker: Circuit_breaker.t option  (** Optional circuit breaker *)
+  }
 
 val default_config : config
-(** Default configuration *)
+(** Default configuration (no circuit breaker) *)
 
 (** Async sink queue type (opaque) *)
 type t
@@ -39,6 +42,12 @@ type t
 val create : config -> (Log_event.t -> unit) -> t
 (** @param config Queue configuration
     @param sink_fn Function that emits events to the underlying sink *)
+
+(** Create a queued wrapper with circuit breaker protection *)
+val create_with_circuit_breaker : config -> (Log_event.t -> unit) -> t
+(** @param config Queue configuration
+    @param sink_fn Function that emits events to the underlying sink
+    @return Queue with integrated circuit breaker (5 failures, 5s timeout) *)
 
 (** Non-blocking enqueue - drops oldest if queue full *)
 val enqueue : t -> Log_event.t -> unit

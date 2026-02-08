@@ -132,27 +132,22 @@ let test_stats () =
     Circuit_breaker.create ~failure_threshold:3 ~reset_timeout_ms:1000 ()
   in
 
-  (* Initial stats *)
-  let s1 = Circuit_breaker.get_stats cb in
-  check int "initial failures = 0" 0 s1.failure_count;
-  check int "initial successes = 0" 0 s1.success_count;
+  (* Initial stats: (failure_count, state, last_failure_time) *)
+  let failures1, state1, _ = Circuit_breaker.get_stats cb in
+  check int "initial failures = 0" 0 failures1;
+  check bool "initial state is Closed" true (state1 = Circuit_breaker.Closed);
 
   (* Some failures *)
   ignore (Circuit_breaker.call cb (fun () -> raise (Failure "err")));
   ignore (Circuit_breaker.call cb (fun () -> raise (Failure "err")));
-  let s2 = Circuit_breaker.get_stats cb in
-  check int "failures = 2" 2 s2.failure_count;
-
-  (* Some successes *)
-  ignore (Circuit_breaker.call cb (fun () -> 1));
-  ignore (Circuit_breaker.call cb (fun () -> 2));
-  let s3 = Circuit_breaker.get_stats cb in
-  check int "successes = 2" 2 s3.success_count;
+  let failures2, _, _ = Circuit_breaker.get_stats cb in
+  check int "failures = 2" 2 failures2;
 
   (* Reset clears stats *)
   Circuit_breaker.reset cb;
-  let s4 = Circuit_breaker.get_stats cb in
-  check int "failures cleared after reset" 0 s4.failure_count
+  let failures3, state3, _ = Circuit_breaker.get_stats cb in
+  check int "failures cleared after reset" 0 failures3;
+  check bool "state is Closed after reset" true (state3 = Circuit_breaker.Closed)
 ;;
 
 let () =

@@ -28,16 +28,6 @@ val create :
     @param rendered_message Fully formatted message string
     @param properties List of structured properties as JSON values *)
 
-val to_yojson : t -> Yojson.Safe.t
-(** Convert log event to Yojson structure. Output follows CLEF (Compact Log
-    Event Format) with fields:
-    - [@t]: RFC3339 timestamp
-    - [@mt]: Message template
-    - [@l]: Log level
-    - [@m]: Rendered message
-    - [CorrelationId]: Optional correlation ID
-    - Additional custom properties *)
-
 val to_json_string : t -> string
 (** Optimized direct JSON string generation. This builds the JSON string
     directly using a Buffer, avoiding intermediate Yojson.Safe.t structures and
