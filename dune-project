@@ -52,7 +52,6 @@
   (dune (>= 3.0))
   (message-templates (= :version))
   (lwt (>= 5.6))
-  (lwt-unix (>= 5.6))
   (yojson (>= 2.0.0))
   (ptime (>= 1.0))
   (alcotest :with-test)))
