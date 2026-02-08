@@ -33,6 +33,7 @@ Sinks (Console, File, etc.)
 
 ## Commands
 
+Benchmark: "dune build @bench | tail -n 50"
 Build: "dune build @install"
 Test (Ocaml): "dune build @runtest" (NOTE: no output means all tests were successful)
 Format code: "dune build --auto-promote @fmt"
@@ -223,6 +224,8 @@ All log events follow CLEF (Compact Log Event Format):
 
 - **Always run tests after changes have been applied**
 - **Always format files after changes have been applied**
+- **Always run examples after changes have been applied**
+- **Always run benchmark after changes have been applied**
 - **Template variables must be in scope**: PPX validates at compile time
 - **Two output formats**: String for display, JSON for structured logging
 - **Level checking is fast-path**: Minimal overhead when disabled
