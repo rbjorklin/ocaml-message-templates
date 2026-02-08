@@ -33,7 +33,7 @@ Sinks (Console, File, etc.)
 
 ## Commands
 
-Benchmark: "dune build @bench | tail -n 50"
+Benchmark: "dune build --force @bench 2>&1 | tail -n 30"
 Build: "dune build @install"
 Test (Ocaml): "dune build @runtest" (NOTE: no output means all tests were successful)
 Format code: "dune build --auto-promote @fmt"
