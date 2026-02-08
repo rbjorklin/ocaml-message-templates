@@ -49,3 +49,39 @@ Per [OCamlverse runtime docs](https://ocamlverse.net/content/runtime.html):
 - Tag 0 blocks with fields shown as `(field1, field2, ...)`
 - Empty blocks shown as `()`
 - Non-zero tag blocks shown as `<tag:N|field1; field2>` (before stripping)
+
+## Synchronization Patterns
+
+### Mutex Safety with Fun.protect
+- Manual `Mutex.lock`/`Mutex.unlock` pairs are error-prone and can deadlock on exceptions
+- Use `with_lock t f = Mutex.lock t.lock; Fun.protect ~finally:(fun () -> Mutex.unlock t.lock) f`
+- Pattern eliminated 15+ manual lock/unlock pairs in async_sink_queue.ml
+- Exceptions no longer escape with locks held, preventing deadlock scenarios
+
+## Module Interface Hygiene
+
+### Missing .mli File Detection
+- 9 modules lacked .mli files: composite_sink, filter, json_sink, level, log_context, log, null_sink, template_parser, types
+- Missing interfaces expose implementation details and prevent API change tracking
+- Adding .mli files requires careful review of exported types and functions
+- Always verify public API surface area after adding interface files
+
+## Code Duplication Patterns
+
+### Date/Time Extraction in File Sink
+- `should_roll` function duplicated Unix.gmtime conversion logic for Daily/Hourly checks
+- Extract `to_date_tuple` and `to_hour_tuple` helpers to eliminate duplication
+- Prevents inconsistencies if rolling logic changes in one place but not another
+
+### State Machine Logic Duplication
+- Circuit breaker had identical state transition logic in both `get_state` and `call` functions
+- Extract `try_transition_to_half_open` helper for single source of truth
+- State transitions must be atomic and consistent across all entry points
+
+## Configuration Builder Patterns
+
+### Sink Creation Boilerplate
+- File, console, and null sinks had nearly identical creation patterns in configuration.ml
+- Generic `add_sink` helper with labeled arguments eliminates ~40% boilerplate
+- All sinks follow same pattern: create -> wrap in sink_fn -> add to config.sinks
+- Extract early to prevent drift between sink type implementations
