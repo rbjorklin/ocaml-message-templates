@@ -40,7 +40,7 @@ Format code: "dune build --auto-promote @fmt"
 Generate documentation: "dune build @doc"
 Lint: "dune build @check"
 Run single test executable: "dune exec test/test_ppx_comprehensive.exe"
-Run example: "dune exec examples/logging_clef_ppx.exe"
+Run examples: "dune build --force @examples"
 Clean and rebuild: "dune clean && dune build @install"
 
 ```

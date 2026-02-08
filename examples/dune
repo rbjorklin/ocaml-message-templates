@@ -21,3 +21,33 @@
  (libraries message-templates message-templates-ppx yojson unix)
  (preprocess
   (pps message-templates-ppx)))
+
+; Run all examples with: dune build @examples
+; All examples run sequentially in a single rule to prevent interleaved output
+
+(rule
+ (alias examples)
+ (deps
+  ./basic.exe
+  ./logging_basic.exe
+  ./logging_advanced.exe
+  ./logging_ppx.exe
+  ./logging_clef_json.exe
+  ./logging_clef_ppx.exe
+  ./comprehensive_dir/main.exe)
+ (action
+  (progn
+   (echo "Running basic.exe...\n")
+   (run ./basic.exe)
+   (echo "\n\nRunning logging_basic.exe...\n")
+   (run ./logging_basic.exe)
+   (echo "\n\nRunning logging_advanced.exe...\n")
+   (run ./logging_advanced.exe)
+   (echo "\n\nRunning logging_ppx.exe...\n")
+   (run ./logging_ppx.exe)
+   (echo "\n\nRunning logging_clef_json.exe...\n")
+   (run ./logging_clef_json.exe)
+   (echo "\n\nRunning logging_clef_ppx.exe...\n")
+   (run ./logging_clef_ppx.exe)
+   (echo "\n\nRunning comprehensive_dir/main.exe...\n")
+   (run ./comprehensive_dir/main.exe))))
