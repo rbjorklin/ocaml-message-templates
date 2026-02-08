@@ -1,10 +1,104 @@
-# AGENTS.md
+# Project Overview
 
-## Project Overview
+OCaml Message Templates is a PPX-based library for compile-time validated message templates with structured logging. It provides zero-runtime-overhead template processing with automatic variable capture from lexical scope, dual output (formatted strings and CLEF JSON), and a comprehensive logging infrastructure modeled after Serilog. The library targets OCaml 5.4.0+ and supports both synchronous and asynchronous (Lwt/Eio) logging patterns.
 
-OCaml Message Templates - A PPX-based library for compile-time validated message templates with structured logging. Provides zero-runtime-overhead template processing with automatic variable capture from lexical scope.
+## Repository Structure
 
-## Architecture
+- **`lib/`** - Core library modules (loggers, sinks, filters, events, context)
+- **`ppx/`** - PPX rewriter for compile-time template processing
+- **`test/`** - Comprehensive test suite using Alcotest and QCheck
+- **`examples/`** - Usage examples demonstrating features and patterns
+- **`benchmarks/`** - Performance benchmarks using core_bench
+- **`message-templates-lwt/`** - Lwt async concurrency support package
+- **`message-templates-eio/`** - Eio effect-based concurrency support package
+- **`doc/`** - Generated API documentation (odoc)
+- **`logs/`** - Runtime log output directory
+- **`.github/workflows/`** - CI/CD automation (documentation deployment)
+- **`.opencode/`** - AI agent configuration and plans
+
+## Build & Development Commands
+
+```bash
+# Install dependencies
+opam install . --deps-only --with-test
+
+# Build all packages
+dune build @install
+
+# Run tests (silent output = success)
+dune build @runtest
+
+# Run a specific test executable
+dune exec test/test_ppx_comprehensive.exe
+
+# Format code
+dune build --auto-promote @fmt
+
+# Lint and type-check
+dune build @check
+
+# Generate documentation
+dune build @doc
+
+# Run benchmarks
+dune build --force @bench 2>&1 | tail -n 30
+
+# Run examples
+dune build --force @examples
+
+# Clean and rebuild
+dune clean && dune build @install
+
+# Run a specific example
+dune exec examples/basic.exe
+dune exec examples/logging_ppx.exe
+```
+
+## Code Style & Conventions
+
+### Naming
+- **Modules**: `CamelCase` (e.g., `Log_event`, `Console_sink`, `Template_parser`)
+- **Types**: Define as `t` inside module (e.g., `Level.t`, `Log_event.t`)
+- **Functions/variables**: `snake_case` (e.g., `parse_template`, `timestamp_expr`)
+- **Constructors**: `CamelCase` (e.g., `Default`, `Structure`, `Stringify`)
+- **Module types**: `S` for signature (e.g., `Sink.S`)
+
+### Formatting
+- Use `dune fmt` with `.ocamlformat` configuration
+- Line length: 80-100 characters
+- Indentation: 2 spaces
+- Profile: `ocamlformat` with sparse type declarations
+
+### Documentation
+```ocaml
+(** Module-level documentation with double asterisk *)
+
+(** Function documentation
+    @param param_name description
+    @return description *)
+```
+
+### Pattern Matching
+- Use exhaustive matching with explicit cases
+- Prefer pattern matching over chained `if/else` for ADTs
+
+### Error Handling
+- Use `Result.t` for fallible operations
+- PPX errors: `Location.raise_errorf ~loc "MessageTemplates: %s" msg`
+
+### Commit Message Template
+```
+<type>: <subject>
+
+<body>
+
+<footer>
+```
+Types: `feat`, `fix`, `refactor`, `test`, `docs`, `chore`
+
+## Architecture Notes
+
+### Data Flow
 
 ```
 Application Code
@@ -13,7 +107,7 @@ Application Code
 Level Check (fast path)
        |
        v
-Template Expansion (PPX)
+Template Expansion (PPX at compile time)
        |
        v
 Context Enrichment (ambient properties)
@@ -22,227 +116,137 @@ Context Enrichment (ambient properties)
 Filtering (level/property-based)
        |
        v
-Sinks (Console, File, etc.)
+Sinks (Console, File, JSON, Composite, Null)
 ```
+
+### Key Components
+
+1. **Template Parser** (`template_parser.ml`) - Angstrom-based parser for message templates with holes, format specifiers, and alignment
+2. **PPX Rewriter** (`ppx/`) - Compile-time code generation, validates variables against scope
+3. **Log Event** (`log_event.ml`) - Core event type with timestamp, level, message template, rendered message, and properties
+4. **Logger** (`logger.ml`) - Main logging interface, writes directly to sinks (bypasses Composite_sink internally)
+5. **Sinks** - Output destinations: Console (colors), File (rolling), JSON (CLEF), Composite, Null
+6. **Filters** (`filter.ml`) - Level-based and property-based event filtering
+7. **Log Context** (`log_context.ml`) - Ambient property storage using Domain-local storage
+8. **Configuration** (`configuration.ml`) - Fluent builder API for logger setup
 
 ### Logger Emit Path
-- Logger.write calls emit_fn directly on each sink - does NOT use Composite_sink.emit
-- Composite_sink.emit is for external consumers, not internal Logger use
-- Per-sink filtering must be implemented by wrapping emit_fn at sink creation time
-- Architecture appears layered but Logger bypasses the composition layer for direct sink access
+- `Logger.write` calls `emit_fn` directly on each sink
+- Does NOT use `Composite_sink.emit` internally
+- `Composite_sink.emit` is for external consumers
+- Per-sink filtering implemented by wrapping `emit_fn` at sink creation time
 
-## Commands
+## Testing Strategy
 
-Benchmark: "dune build --force @bench 2>&1 | tail -n 30"
-Build: "dune build @install"
-Test (Ocaml): "dune build @runtest" (NOTE: no output means all tests were successful)
-Format code: "dune build --auto-promote @fmt"
-Generate documentation: "dune build @doc"
-Lint: "dune build @check"
-Run single test executable: "dune exec test/test_ppx_comprehensive.exe"
-Run examples: "dune build --force @examples"
-Clean and rebuild: "dune clean && dune build @install"
+### Test Organization
+- Unit tests: One test file per module (e.g., `test_level.ml`, `test_logger.ml`)
+- Property-based tests: QCheck for parsers and filters (`test_qcheck_*.ml`)
+- PPX tests: `test_ppx_comprehensive.ml`, `test_type_coverage.ml`
+- Integration tests: Full logger lifecycle and sink interactions
 
+### Running Tests
+```bash
+# All tests
+dune build @runtest
+
+# Specific test module
+dune exec test/test_circuit_breaker.exe
+
+# View test output
+cat _build/_tests/latest/*.output
 ```
 
-## Code Style Guidelines
+### Test Dependencies
+- PPX must be built before tests using `[%template]` or `[%log.*]`
+- Tests manually create `Composite_sink.sink_fn` records
+- Changing `sink_fn` fields requires updating all test files
 
-### Naming Conventions
+### CI
+- GitHub Actions workflow in `.github/workflows/docs.yml`
+- Deploys odoc to GitHub Pages on push to main
+- Tests run via `dune build @runtest` in opam build
 
-- **Modules**: `CamelCase` (e.g., `Log_event`, `Console_sink`, `Template_parser`)
-- **Types**: Define as `t` inside module, use qualified references (e.g., `Level.t`, `Log_event.t`)
-- **Functions/variables**: `snake_case` (e.g., `parse_template`, `extract_holes`, `timestamp_expr`)
-- **Constructors**: `CamelCase` (e.g., `Default`, `Structure`, `Stringify`, `Text`, `Hole`)
-- **Module types**: `S` for signature, or descriptive name (e.g., `Sink.S`)
+## Security & Compliance
 
-### Type Definitions
+### Secrets Handling
+- No secrets in source code
+- Use environment variables for configuration (see `CONFIGURATION.md` patterns)
+- `.envrc` present for direnv support (user-managed)
 
+### Dependencies
+- Core: `ppxlib`, `angstrom`, `yojson`, `ptime`
+- Test: `alcotest`, `qcheck`, `mdx`
+- Dev: `core_bench`, `ppx_bench`
+- All dependencies pinned in `dune-project` with minimum versions
+
+### License
+- MIT License (see `dune-project`)
+
+### Compliance
+- Implements [Message Templates specification](https://messagetemplates.org/)
+- CLEF (Compact Log Event Format) output compatible with Serilog
+
+## Agent Guardrails
+
+### Files Never Automatically Modify
+- `dune-project` version constraints (requires careful review)
+- `*.opam` files (auto-generated from dune-project)
+- `.ocamlformat` configuration
+- Git history or tags
+
+### Required Reviews
+- Changes to PPX code generation (`ppx/code_generator.ml`)
+- Changes to public API in `.mli` files
+- New dependencies in `dune-project`
+- Modifications to `Logger.t` type (affects `configuration.ml`)
+
+### Rate Limits
+- Run tests after every significant change
+- Run format check before committing
+- Run benchmarks when performance-critical code changes
+
+### Safety Patterns
+- Use `Fun.protect` with mutex operations to prevent deadlocks
+- Never hold locks during I/O or user callbacks
+- Check-Work-Record pattern for state machine operations
+
+## Extensibility Hooks
+
+### Custom Sinks
+Implement `Sink.S` interface:
 ```ocaml
-(* Define core type as 't' inside module *)
-type t =
-  | Verbose
-  | Debug
-  | Information
-
-(* Records with inline documentation *)
-type hole = {
-  name: string;
-  operator: operator;
-  format: string option;
-}
-
-(* Use option types for nullable fields *)
-alignment: (bool * int) option;
+module My_sink : Sink.S = struct
+  type t = { ... }
+  let emit t event = ...
+  let flush t = ...
+  let close t = ...
+end
 ```
 
-### Imports and Opening Modules
+### Environment Variables
+- `LOG_LEVEL` - Configure minimum log level at runtime
+- `LOG_FILE` - Configure log file path
+- Standard OCaml vars (`OCAMLRUNPARAM`, etc.)
 
-```ocaml
-(* At top of file, list opens *)
-open Ppxlib
-open Ast_builder.Default
+### Feature Flags
+- `Timestamp_cache.set_enabled` - Toggle timestamp caching
+- Per-sink `min_level` filtering
+- Circuit breaker configuration (`failure_threshold`, `reset_timeout_ms`)
 
-(* For local module, open types explicitly *)
-open Message_templates.Types
-open Angstrom
+### Plugin Points
+- Custom filters via `Filter.t` combinators
+- Enrichers for adding ambient properties
+- Output templates for sink formatting
 
-(* Prefer qualified access for external modules *)
-let json = Yojson.Safe.to_string data
-let time = Ptime.to_rfc3339 timestamp
-```
+## Further Reading
 
-### Documentation
-
-```ocaml
-(** Module-level documentation with double asterisk *)
-
-(** Function documentation
-    @param param_name description
-    @return description *)
-let function_name param =
-  ...
-
-(** Type documentation *)
-type t =
-  | Variant  (* Case documentation *)
-```
-
-### Pattern Matching
-
-```ocaml
-(* Use exhaustive matching with explicit cases *)
-match result with
-| Ok parts -> process parts
-| Error msg -> handle_error msg
-
-(* For list operations, prefer pattern matching over List.* functions when clearer *)
-let rec process = function
-  | [] -> []
-  | x :: xs -> f x :: process xs
-```
-
-### Error Handling
-
-```ocaml
-(* Use Result.t for operations that can fail *)
-let parse_template str =
-  match Angstrom.parse_string ~consume:All template str with
-  | Ok parts -> Ok parts
-  | Error msg -> Error msg
-
-(* PPX errors: use Location.raise_errorf with descriptive messages *)
-| Error msg -> Location.raise_errorf ~loc "MessageTemplates: Parse error: %s" msg
-
-(* Option handling with explicit defaults *)
-option Default (char '@' *> return Structure)
-```
-
-### Code Organization
-
-- Keep modules focused (single responsibility)
-- Module order: types first, then core functions, then helpers
-- Group related functions with blank lines
-- Maximum ~80-100 characters per line
-- 2-space indentation
-
-### Testing Style
-
-```ocaml
-(* Use Alcotest with descriptive test names *)
-let test_level_ordering () =
-  check bool "Verbose < Debug" true (Level.compare Level.Verbose Level.Debug < 0);
-  check int "Debug = 1" 1 (Level.to_int Level.Debug)
-
-let () =
-  run "Level Tests" [
-    "ordering", [
-      test_case "Level ordering" `Quick test_level_ordering;
-    ];
-  ]
-```
-
-### PPX Code Generation
-
-```ocaml
-(* Use [%expr ...] for AST construction *)
-let json_expr = [%expr `String [%e estring ~loc str]]
-
-(* Use Ast_builder.Default functions for complex expressions *)
-let tuple = pexp_tuple ~loc [expr1; expr2]
-let apply = eapply ~loc func args
-
-(* Include location in generated code *)
-let loc = Expansion_context.Extension.extension_point_loc ctxt
-```
-
-## Project Structure
-
-```
-lib/           - Core library modules
-ppx/           - PPX rewriter code
-test/          - Test files (one per module)
-examples/      - Usage examples
-benchmarks/    - Performance benchmarks
-```
-
-## Key Patterns
-
-- **Template expansion**: `[%template "User {name}"]` returns `(string * Yojson.Safe.t)`
-- **Log levels**: Use Level.t with comparison operators (`>=`, `<`)
-- **Sinks**: Implement `Sink.S` interface for custom outputs
-- **Configuration**: Fluent builder pattern with `|>` operator
-- **Context**: Use `Log_context.with_property` for ambient properties
-
-## Common Tasks
-
-- Adding new log level: Edit `lib/level.ml` and add variant
-- Adding new sink: Create `lib/<name>_sink.ml` implementing `Sink.S`
-- Adding new PPX extension: Edit `ppx/ppx_message_templates.ml`
-- Template format specifiers: Edit `ppx/code_generator.ml`
-
-## JSON Output Format
-
-All log events follow CLEF (Compact Log Event Format):
-```json
-{
-  "@t": "2026-01-31T23:54:42-00:00",
-  "@mt": "User {username} logged in from {ip_address}",
-  "@m": "User alice logged in from 192.168.1.1",
-  "@l": "Information",
-  "username": "alice",
-  "ip_address": "192.168.1.1"
-}
-```
-
-- `@t`: RFC3339 timestamp
-- `@mt`: Message template (original template string with placeholders)
-- `@m`: Rendered message (fully formatted with values)
-- `@l`: Log level
-- Additional fields: Captured variables and context properties
-
-## Notes
-
-- **Always run tests after changes have been applied**
-- **Always format files after changes have been applied**
-- **Always run examples after changes have been applied**
-- **Always run benchmark after changes have been applied**
-- **Template variables must be in scope**: PPX validates at compile time
-- **Two output formats**: String for display, JSON for structured logging
-- **Level checking is fast-path**: Minimal overhead when disabled
-- **Log_context uses ambient state**: Properties flow across function calls
-- **File sinks support rolling**: Daily, Hourly, Infinite, or By_size
-- **Console sinks support colors**: Configurable with templates (ANSI codes)
-- **Follows Message Templates spec**: https://messagetemplates.org/
-- **When in plan mode you are allowed to write to**: .opencode/plans/
-
-### String Parsing Normalization
-- Level.of_string had 14 pattern match cases for different capitalizations ("Verbose", "verbose", "VRB", "vrb", etc.)
-- Normalize once with `String.lowercase_ascii` then match on normalized form
-- Reduced to 7 cases while maintaining same functionality
-- Pattern applies to any string-to-variant parsing that needs case-insensitivity
-
-### Comparison Operator Completeness
-- Level module initially only exposed `(>=)` and `(<)` operators, missing `(>)`, `(<=)`, `(=)`, `(<>)`
-- Users expect full comparison operator set for ordered types
-- When adding comparison operators, include complete set: `compare`, `(=)`, `(<>)`, `(<)`, `(>)`, `(<=)`, `(>=)`
-- Deriving `compare` from ppx_deriving can automate this, but manual implementation needed for fine-grained control
+- **README.md** - Feature overview, usage examples, API reference
+- **CONFIGURATION.md** - Complete configuration guide with patterns
+- **DEPLOYMENT.md** - Production deployment guide
+- **MIGRATION.md** - Migration guide between versions
+- **lib/AGENTS.md** - Core library architecture details
+- **ppx/AGENTS.md** - PPX implementation details
+- **test/AGENTS.md** - Testing infrastructure notes
+- **message-templates-lwt/AGENTS.md** - Lwt async patterns
+- **message-templates-eio/AGENTS.md** - Eio async patterns
+- `.opencode/plans/` - Active development plans
