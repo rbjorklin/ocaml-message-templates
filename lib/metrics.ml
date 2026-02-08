@@ -28,6 +28,12 @@ type t =
 (** Create a new metrics tracker *)
 let create () = {sinks= Hashtbl.create 16; lock= Mutex.create ()}
 
+(** Execute f with lock held, ensuring unlock is always called *)
+let with_lock t f =
+  Mutex.lock t.lock;
+  Fun.protect ~finally:(fun () -> Mutex.unlock t.lock) f
+;;
+
 (** Calculate percentiles from latency queue *)
 let update_percentiles latencies =
   if Queue.is_empty latencies then
@@ -71,84 +77,74 @@ let get_sink_data_locked t sink_id =
 
 (** Record successful event emission *)
 let record_event t ~sink_id ~latency_us =
-  Mutex.lock t.lock;
-  let data = get_sink_data_locked t sink_id in
-  data.events_total <- data.events_total + 1;
+  with_lock t (fun () ->
+      let data = get_sink_data_locked t sink_id in
+      data.events_total <- data.events_total + 1;
 
-  (* Keep only last 1000 latencies *)
-  if Queue.length data.latencies >= 1000 then
-    ignore (Queue.take data.latencies : float);
-  Queue.add latency_us data.latencies;
+      (* Keep only last 1000 latencies *)
+      if Queue.length data.latencies >= 1000 then
+        ignore (Queue.take data.latencies : float);
+      Queue.add latency_us data.latencies;
 
-  (* Update percentiles *)
-  let p50, p95 = update_percentiles data.latencies in
-  data.p50 <- p50;
-  data.p95 <- p95;
-
-  Mutex.unlock t.lock
+      (* Update percentiles *)
+      let p50, p95 = update_percentiles data.latencies in
+      data.p50 <- p50;
+      data.p95 <- p95 )
 ;;
 
 (** Record a dropped event *)
 let record_drop t ~sink_id =
-  Mutex.lock t.lock;
-  let data = get_sink_data_locked t sink_id in
-  data.events_dropped <- data.events_dropped + 1;
-  Mutex.unlock t.lock
+  with_lock t (fun () ->
+      let data = get_sink_data_locked t sink_id in
+      data.events_dropped <- data.events_dropped + 1 )
 ;;
 
 (** Record an emission error *)
 let record_error t ~sink_id exn =
-  Mutex.lock t.lock;
-  let data = get_sink_data_locked t sink_id in
-  data.events_failed <- data.events_failed + 1;
-  data.last_error <- Some (exn, Unix.gettimeofday ());
-  Mutex.unlock t.lock
+  with_lock t (fun () ->
+      let data = get_sink_data_locked t sink_id in
+      data.events_failed <- data.events_failed + 1;
+      data.last_error <- Some (exn, Unix.gettimeofday ()) )
 ;;
 
 (** Get metrics for a specific sink *)
 let get_sink_metrics t sink_id =
-  Mutex.lock t.lock;
-  let result =
-    match Hashtbl.find_opt t.sinks sink_id with
-    | None -> None
-    | Some data ->
-        Some
-          { sink_id
-          ; events_total= data.events_total
-          ; events_dropped= data.events_dropped
-          ; events_failed= data.events_failed
-          ; bytes_written= data.bytes_written
-          ; last_error= data.last_error
-          ; latency_p50_us= data.p50
-          ; latency_p95_us= data.p95 }
-  in
-  Mutex.unlock t.lock; result
+  with_lock t (fun () ->
+      match Hashtbl.find_opt t.sinks sink_id with
+      | None -> None
+      | Some data ->
+          Some
+            { sink_id
+            ; events_total= data.events_total
+            ; events_dropped= data.events_dropped
+            ; events_failed= data.events_failed
+            ; bytes_written= data.bytes_written
+            ; last_error= data.last_error
+            ; latency_p50_us= data.p50
+            ; latency_p95_us= data.p95 } )
 ;;
 
 (** Get metrics for all sinks *)
 let get_all_metrics t =
-  Mutex.lock t.lock;
-  let metrics =
-    Hashtbl.fold
-      (fun sink_id data acc ->
-        let m =
-          { sink_id
-          ; events_total= data.events_total
-          ; events_dropped= data.events_dropped
-          ; events_failed= data.events_failed
-          ; bytes_written= data.bytes_written
-          ; last_error= data.last_error
-          ; latency_p50_us= data.p50
-          ; latency_p95_us= data.p95 }
-        in
-        m :: acc )
-      t.sinks []
-  in
-  Mutex.unlock t.lock; metrics
+  with_lock t (fun () ->
+      Hashtbl.fold
+        (fun sink_id data acc ->
+          let m =
+            { sink_id
+            ; events_total= data.events_total
+            ; events_dropped= data.events_dropped
+            ; events_failed= data.events_failed
+            ; bytes_written= data.bytes_written
+            ; last_error= data.last_error
+            ; latency_p50_us= data.p50
+            ; latency_p95_us= data.p95 }
+          in
+          m :: acc )
+        t.sinks [] )
 ;;
 
 (** Reset all metrics *)
-let reset t = Mutex.lock t.lock; Hashtbl.clear t.sinks; Mutex.unlock t.lock
+let reset t = with_lock t (fun () -> Hashtbl.clear t.sinks)
 
 (** Export metrics as JSON *)
 let to_json t =

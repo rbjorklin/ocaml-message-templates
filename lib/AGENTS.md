@@ -58,6 +58,12 @@ Per [OCamlverse runtime docs](https://ocamlverse.net/content/runtime.html):
 - Pattern eliminated 15+ manual lock/unlock pairs in async_sink_queue.ml
 - Exceptions no longer escape with locks held, preventing deadlock scenarios
 
+### Check-Work-Record Pattern
+- Some operations need to: check state under lock → do work unlocked → record results locked
+- Example: `Circuit_breaker.call` checks state, executes function outside lock, then records success/failure
+- Use multiple `with_lock` calls with the unlocked work happening between them
+- Never hold locks during potentially blocking operations (I/O, callbacks, user functions)
+
 ## Module Interface Hygiene
 
 ### Missing .mli File Detection

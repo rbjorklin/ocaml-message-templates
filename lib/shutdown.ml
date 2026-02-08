@@ -12,10 +12,14 @@ type t =
 
 let create () = {handlers= []; lock= Mutex.create (); shutdown_complete= false}
 
-let register t handler =
+(** Execute f with lock held, ensuring unlock is always called *)
+let with_lock t f =
   Mutex.lock t.lock;
-  t.handlers <- handler :: t.handlers;
-  Mutex.unlock t.lock
+  Fun.protect ~finally:(fun () -> Mutex.unlock t.lock) f
+;;
+
+let register t handler =
+  with_lock t (fun () -> t.handlers <- handler :: t.handlers)
 ;;
 
 let execute_immediate t =
@@ -65,13 +69,14 @@ let execute_graceful t timeout_sec =
 ;;
 
 let execute t strategy =
-  Mutex.lock t.lock;
-  if t.shutdown_complete then (
-    Mutex.unlock t.lock;
-    raise (Failure "Shutdown already executed") );
-  let handlers_copy = t.handlers in
-  t.shutdown_complete <- true;
-  Mutex.unlock t.lock;
+  let handlers_copy =
+    with_lock t (fun () ->
+        if t.shutdown_complete then
+          raise (Failure "Shutdown already executed");
+        let handlers_copy = t.handlers in
+        t.shutdown_complete <- true;
+        handlers_copy )
+  in
 
   match strategy with
   | Immediate -> execute_immediate {t with handlers= handlers_copy}
@@ -80,15 +85,10 @@ let execute t strategy =
       execute_graceful {t with handlers= handlers_copy} timeout_sec
 ;;
 
-let is_shutdown t =
-  Mutex.lock t.lock;
-  let result = t.shutdown_complete in
-  Mutex.unlock t.lock; result
-;;
+let is_shutdown t = with_lock t (fun () -> t.shutdown_complete)
 
 let reset t =
-  Mutex.lock t.lock;
-  t.handlers <- [];
-  t.shutdown_complete <- false;
-  Mutex.unlock t.lock
+  with_lock t (fun () ->
+      t.handlers <- [];
+      t.shutdown_complete <- false )
 ;;

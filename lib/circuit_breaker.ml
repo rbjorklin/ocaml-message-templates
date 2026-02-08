@@ -15,6 +15,12 @@ type t =
 
 let get_time_ms () = Unix.gettimeofday () *. 1000.0
 
+(** Execute f with lock held, ensuring unlock is always called *)
+let with_lock t f =
+  Mutex.lock t.lock;
+  Fun.protect ~finally:(fun () -> Mutex.unlock t.lock) f
+;;
+
 let create ~failure_threshold ~reset_timeout_ms () =
   if failure_threshold <= 0 then
     raise (Invalid_argument "failure_threshold must be positive");
@@ -37,10 +43,9 @@ let try_transition_to_half_open t =
 ;;
 
 let get_state t =
-  Mutex.lock t.lock;
-  try_transition_to_half_open t;
-  let result = t.state in
-  Mutex.unlock t.lock; result
+  with_lock t (fun () ->
+      try_transition_to_half_open t;
+      t.state )
 ;;
 
 let record_success t =
@@ -57,34 +62,33 @@ let record_failure t =
 ;;
 
 let call t f =
-  Mutex.lock t.lock;
-  try_transition_to_half_open t;
+  let can_attempt =
+    with_lock t (fun () ->
+        try_transition_to_half_open t;
+        t.state <> Open )
+  in
 
-  let can_attempt = t.state <> Open in
-
-  if not can_attempt then (
-    Mutex.unlock t.lock; None )
-  else (
+  if not can_attempt then
+    None
+  else
     (* Execute the call outside the lock *)
-    Mutex.unlock t.lock;
     try
       let result = f () in
-      Mutex.lock t.lock; record_success t; Mutex.unlock t.lock; Some result
+      with_lock t (fun () -> record_success t);
+      Some result
     with _exn ->
-      Mutex.lock t.lock; record_failure t; Mutex.unlock t.lock; None )
+      with_lock t (fun () -> record_failure t);
+      None
 ;;
 
 let reset t =
-  Mutex.lock t.lock;
-  t.state <- Closed;
-  t.failure_count <- 0;
-  Mutex.unlock t.lock
+  with_lock t (fun () ->
+      t.state <- Closed;
+      t.failure_count <- 0 )
 ;;
 
 (** Simple stats as a tuple: (failure_count, success_count, last_failure_time)
 *)
 let get_stats t =
-  Mutex.lock t.lock;
-  let result = (t.failure_count, t.state, t.last_failure_time) in
-  Mutex.unlock t.lock; result
+  with_lock t (fun () -> (t.failure_count, t.state, t.last_failure_time))
 ;;
