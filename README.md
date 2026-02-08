@@ -473,14 +473,14 @@ Timestamp_cache.set_enabled false
 Benchmark results (1 million iterations):
 
 ```
-PPX Simple Template:  0.061s (16M ops/sec)
-Printf Simple:        0.056s (18M ops/sec)
-String Concat:        0.036s (27M ops/sec)
+PPX Simple Template:  0.093s (10.7M ops/sec)
+Printf Simple:        0.056s (17.7M ops/sec)
+String Concat:        0.034s (29.3M ops/sec)
 
-PPX with Formats:     0.586s (1.7M ops/sec)
-Printf with Formats:  0.356s (2.8M ops/sec)
+PPX with Formats:     0.391s (2.6M ops/sec)
+Printf with Formats:  0.353s (2.8M ops/sec)
 
-PPX JSON Output:      0.232s (4.3M ops/sec)
+PPX JSON Output:      0.336s (3.0M ops/sec)
 ```
 
 PPX-generated code has minimal overhead compared to hand-written Printf.
