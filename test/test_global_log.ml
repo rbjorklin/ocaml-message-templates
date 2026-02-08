@@ -271,6 +271,150 @@ let test_log_close_and_flush () =
   Sys.remove path
 ;;
 
+(* Domain safety tests *)
+let yojson =
+  testable
+    (fun fmt v -> Format.fprintf fmt "%s" (Yojson.Safe.to_string v))
+    ( = )
+;;
+
+let test_domain_isolation () =
+  (* Clear main domain context first *)
+  Log_context.clear ();
+
+  let domain1_result = ref None in
+  let domain2_result = ref None in
+
+  Log_context.with_property "key" (`String "domain1") (fun () ->
+      let d1 =
+        Domain.spawn (fun () ->
+            Log_context.with_property "key" (`String "domain1_inner") (fun () ->
+                domain1_result := Some (Log_context.current_properties ()) ) )
+      in
+
+      let d2 =
+        Domain.spawn (fun () ->
+            Log_context.with_property "key" (`String "domain2") (fun () ->
+                domain2_result := Some (Log_context.current_properties ()) ) )
+      in
+
+      Domain.join d1;
+      Domain.join d2;
+
+      (* Verify each domain saw its own value *)
+      check
+        (option (list (pair string yojson)))
+        "domain1 has its value"
+        (Some [("key", `String "domain1_inner")])
+        !domain1_result;
+
+      check
+        (option (list (pair string yojson)))
+        "domain2 has its value"
+        (Some [("key", `String "domain2")])
+        !domain2_result;
+
+      (* Verify main domain still has its original value *)
+      check
+        (list (pair string yojson))
+        "main domain unchanged"
+        [("key", `String "domain1")]
+        (Log_context.current_properties ()) );
+
+  Log_context.clear ()
+;;
+
+let test_correlation_id_isolation () =
+  Log_context.clear ();
+
+  let results = Array.make 3 None in
+
+  let d1 =
+    Domain.spawn (fun () ->
+        Log_context.with_correlation_id "corr-1" (fun () ->
+            results.(0) <- Log_context.get_correlation_id () ) )
+  in
+
+  let d2 =
+    Domain.spawn (fun () ->
+        Log_context.with_correlation_id "corr-2" (fun () ->
+            results.(1) <- Log_context.get_correlation_id () ) )
+  in
+
+  Domain.join d1;
+  Domain.join d2;
+
+  results.(2) <- Log_context.get_correlation_id ();
+
+  check (option string) "domain1 corr" (Some "corr-1") results.(0);
+  check (option string) "domain2 corr" (Some "corr-2") results.(1);
+  check (option string) "main domain no corr" None results.(2);
+
+  Log_context.clear ()
+;;
+
+let test_cross_domain_transfer () =
+  Log_context.clear ();
+
+  Log_context.with_property "trace_id" (`String "trace-123") (fun () ->
+      Log_context.with_correlation_id "corr-abc" (fun () ->
+          let ctx = Log_context.export_context () in
+
+          let result = ref None in
+          let d =
+            Domain.spawn (fun () ->
+                Log_context.import_context ctx (fun () ->
+                    result :=
+                      Some
+                        ( Log_context.current_properties ()
+                        , Log_context.get_correlation_id () ) ) )
+          in
+
+          Domain.join d;
+
+          check
+            (option (pair (list (pair string yojson)) (option string)))
+            "context transferred"
+            (Some ([("trace_id", `String "trace-123")], Some "corr-abc"))
+            !result ) );
+
+  Log_context.clear ()
+;;
+
+let test_export_import_preserves_main_context () =
+  Log_context.clear ();
+
+  (* Set up main domain context *)
+  Log_context.push_property "main_prop" (`String "main_value");
+  Log_context.push_correlation_id "main_corr";
+
+  (* Export context *)
+  let ctx = Log_context.export_context () in
+
+  (* Spawn domain that imports the context *)
+  let d =
+    Domain.spawn (fun () ->
+        Log_context.import_context ctx (fun () ->
+            (* Modify context in spawned domain *)
+            Log_context.push_property "spawned_prop" (`String "spawned_value");
+            Log_context.push_correlation_id "spawned_corr" ) )
+  in
+
+  Domain.join d;
+
+  (* Verify main domain context is unchanged *)
+  check
+    (list (pair string yojson))
+    "main domain properties unchanged"
+    [("main_prop", `String "main_value")]
+    (Log_context.current_properties ());
+
+  check (option string) "main domain correlation unchanged" (Some "main_corr")
+    (Log_context.get_correlation_id ());
+
+  Log_context.clear ()
+;;
+
 let () =
   run "Global Log Tests"
     [ ( "basic"
@@ -290,5 +434,13 @@ let () =
         ; test_case "Context with_scope preserves outer context" `Quick
             test_log_context_with_scope
         ; test_case "Context with_properties multiple" `Quick
-            test_log_context_with_properties ] ) ]
+            test_log_context_with_properties ] )
+    ; ( "domain_safety"
+      , [ test_case "Domain isolation" `Quick test_domain_isolation
+        ; test_case "Correlation ID isolation" `Quick
+            test_correlation_id_isolation
+        ; test_case "Cross-domain context transfer" `Quick
+            test_cross_domain_transfer
+        ; test_case "Export/import preserves main context" `Quick
+            test_export_import_preserves_main_context ] ) ]
 ;;
