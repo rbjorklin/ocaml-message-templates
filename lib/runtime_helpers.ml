@@ -345,8 +345,7 @@ let format_sink_template template event =
   let level_str = Level.to_short_string (Log_event.get_level event) in
   let message_str = Log_event.get_rendered_message event in
   (* Single-pass replacement using Buffer *)
-  template
-  |> replace_all "{timestamp}" timestamp_str
-  |> replace_all "{level}" level_str
-  |> replace_all "{message}" message_str
+  let with_timestamp = replace_all template "{timestamp}" timestamp_str in
+  let with_level = replace_all with_timestamp "{level}" level_str in
+  replace_all with_level "{message}" message_str
 ;;
