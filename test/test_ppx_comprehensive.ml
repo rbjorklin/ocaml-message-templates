@@ -76,6 +76,27 @@ let test_timestamp_format () =
   check bool "Timestamp has RFC3339 format" true (String.contains json_str 'T')
 ;;
 
+let test_map_stringify () =
+  let module StringMap = Map.Make (String) in
+  let map = StringMap.empty in
+  let map = StringMap.add "key1" 100 map in
+  let map = StringMap.add "key2" 200 map in
+  let msg, _ = [%template "Map: {$map}"] in
+  (* Check that map contains the key names *)
+  check bool "Message contains key1" true (String.contains msg 'k');
+  check bool "Message contains key2" true (String.contains msg '2')
+;;
+
+let test_hashtbl_stringify () =
+  let tbl = Hashtbl.create 10 in
+  Hashtbl.add tbl "a" 1;
+  Hashtbl.add tbl "b" 2;
+  let msg, _ = [%template "Hash table: {$tbl}"] in
+  (* Check that hashtable contains the key names *)
+  check bool "Message contains hashtable keys" true
+    (String.contains msg 'a' || String.contains msg 'b')
+;;
+
 let () =
   run "PPX Comprehensive Tests"
     [ ( "basic"
@@ -86,5 +107,7 @@ let () =
         ; test_case "Escaped braces" `Quick test_escaped_braces
         ; test_case "Empty template" `Quick test_empty_template
         ; test_case "Mixed types" `Quick test_mixed_types
-        ; test_case "Timestamp format" `Quick test_timestamp_format ] ) ]
+        ; test_case "Timestamp format" `Quick test_timestamp_format
+        ; test_case "Map stringify" `Quick test_map_stringify
+        ; test_case "Hashtbl stringify" `Quick test_hashtbl_stringify ] ) ]
 ;;

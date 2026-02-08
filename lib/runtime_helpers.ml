@@ -141,6 +141,17 @@ let generic_to_string (type a) (v : a) : string =
       "; " ^ head_str ^ list_contents_to_string tail
     else
       ""
+  and block_to_string repr =
+    (* Convert a block to string by showing its fields *)
+    let size = O.size repr in
+    let tag = O.tag repr in
+    if size = 0 then
+      Printf.sprintf "<tag:%d>" tag
+    else
+      let fields =
+        List.init size (fun i -> generic_to_string_impl (O.field repr i))
+      in
+      Printf.sprintf "<tag:%d|%s>" tag (String.concat "; " fields)
   and generic_to_string_impl repr =
     if O.is_int repr then
       string_of_int (O.obj repr)
@@ -156,8 +167,8 @@ let generic_to_string (type a) (v : a) : string =
             (* Might be a list cons cell, try to convert as list *)
             list_to_string (O.obj repr)
           else
-            "<block>"
-      | _ -> "<unknown>"
+            block_to_string repr
+      | tag -> block_to_string repr
     else
       "<unknown>"
   in
