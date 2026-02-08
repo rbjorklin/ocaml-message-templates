@@ -141,17 +141,86 @@ let generic_to_string (type a) (v : a) : string =
       "; " ^ head_str ^ list_contents_to_string tail
     else
       ""
+  (* Try to traverse a Set/Map tree structure and return elements as a list
+     Returns None if it doesn't look like a Set/Map tree Set: Node of {l; v; r;
+     h} -> 4 fields (left, value, right, height) Map: Node of {l; v; d; r; h} ->
+     5 fields (left, key, data, right, height) *)
+  and try_traverse_set_tree repr =
+    let size = O.size repr in
+    let tag = O.tag repr in
+    (* Check if this looks like a Set Node (4 fields) or Map Node (5 fields) *)
+    if tag = 0 && (size = 4 || size = 5) then
+      try
+        let left = O.field repr 0 in
+        let key = O.field repr 1 in
+        let right = O.field repr (size - 2) in
+        let _height = O.field repr (size - 1) in
+        (* Verify height field is an integer (sanity check) *)
+        if not (O.is_int _height) then
+          raise Exit;
+        (* For Map, the value is at index 2; for Set, the value is at index 1 *)
+        let value_str =
+          if size = 5 then
+            (* Map - show as (key, value) pair *)
+            let value = O.field repr 2 in
+            "("
+            ^ generic_to_string_impl key
+            ^ ", "
+            ^ generic_to_string_impl value
+            ^ ")"
+          else
+            (* Set - just show the value *)
+            generic_to_string_impl key
+        in
+        (* Recursively collect elements *)
+        let left_elements =
+          if O.is_int left then
+            (* Empty *)
+            []
+          else
+            match
+              try_traverse_set_tree left
+            with
+            | Some els -> els
+            | None -> raise Exit
+        in
+        let right_elements =
+          if O.is_int right then
+            (* Empty *)
+            []
+          else
+            match
+              try_traverse_set_tree right
+            with
+            | Some els -> els
+            | None -> raise Exit
+        in
+        Some (left_elements @ [value_str] @ right_elements)
+      with Exit -> None
+    else
+      None
   and block_to_string repr =
     (* Convert a block to string by showing its fields *)
     let size = O.size repr in
     let tag = O.tag repr in
-    if size = 0 then
-      Printf.sprintf "<tag:%d>" tag
+    (* First, try to detect and format as Set/Map (4 or 5 fields with tag 0) *)
+    if (size = 4 || size = 5) && tag = 0 then
+      match
+        try_traverse_set_tree repr
+      with
+      | Some elements -> "[" ^ String.concat "; " elements ^ "]"
+      | None ->
+          let fields =
+            List.init size (fun i -> generic_to_string_impl (O.field repr i))
+          in
+          "(" ^ String.concat ", " fields ^ ")"
+    else if size = 0 then
+      "()"
     else
       let fields =
         List.init size (fun i -> generic_to_string_impl (O.field repr i))
       in
-      Printf.sprintf "<tag:%d|%s>" tag (String.concat "; " fields)
+      "(" ^ String.concat ", " fields ^ ")"
   and generic_to_string_impl repr =
     if O.is_int repr then
       string_of_int (O.obj repr)
@@ -161,6 +230,29 @@ let generic_to_string (type a) (v : a) : string =
       with
       | 252 -> (O.obj repr : string)
       | 253 -> string_of_float (O.obj repr : float)
+      | 254 ->
+          (* Flat float array - convert to list representation *)
+          let size = O.size repr in
+          let floats =
+            List.init size (fun i -> string_of_float (O.double_field repr i))
+          in
+          "[" ^ String.concat "; " floats ^ "]"
+      | 255 -> "<custom>"
+      | 251 -> "<abstract>"
+      | 250 ->
+          (* Forward value - lazy value that has been forced *)
+          (* The first field points to the forced value *)
+          if O.size repr > 0 then
+            generic_to_string_impl (O.field repr 0)
+          else
+            "<forward>"
+      | 249 -> "<infix>"
+      | 248 -> "<object>"
+      | 247 -> "<closure>"
+      | 246 ->
+          (* Lazy value - not yet forced *)
+          (* Lazy values have a header and thunk function *)
+          "<lazy>"
       | 0 ->
           (* Could be a list or a tuple - check if it looks like a cons cell *)
           if O.size repr = 2 then
@@ -179,18 +271,40 @@ let generic_to_string (type a) (v : a) : string =
     unknown types. *)
 let generic_to_json (type a) (v : a) : Yojson.Safe.t =
   let module O = Obj in
-  let repr = O.repr v in
-  if O.is_int repr then
-    `Int (O.obj repr)
-  else if O.is_block repr then
-    match
-      O.tag repr
-    with
-    | 252 -> `String (O.obj repr : string)
-    | 253 -> `Float (O.obj repr : float)
-    | _ -> `String (generic_to_string v)
-  else
-    `String "<unknown>"
+  (* Recursive helper to avoid type annotation issues *)
+  let rec convert repr =
+    if O.is_int repr then
+      `Int (O.obj repr)
+    else if O.is_block repr then
+      match
+        O.tag repr
+      with
+      | 252 -> `String (O.obj repr : string)
+      | 253 -> `Float (O.obj repr : float)
+      | 254 ->
+          (* Flat float array *)
+          let size = O.size repr in
+          let floats =
+            List.init size (fun i -> `Float (O.double_field repr i))
+          in
+          `List floats
+      | 255 -> `String "<custom>"
+      | 251 -> `String "<abstract>"
+      | 250 ->
+          (* Forward value - dereference to the forced value *)
+          if O.size repr > 0 then
+            convert (O.field repr 0)
+          else
+            `String "<forward>"
+      | 249 -> `String "<infix>"
+      | 248 -> `String "<object>"
+      | 247 -> `String "<closure>"
+      | 246 -> `String "<lazy>"
+      | _ -> `String (generic_to_string v)
+    else
+      `String "<unknown>"
+  in
+  convert (O.repr v)
 ;;
 
 (** Format a timestamp for display *)

@@ -15,7 +15,8 @@
   test_qcheck_properties
   test_qcheck_templates
   test_shutdown
-  test_sinks)
+  test_sinks
+  test_type_coverage)
  (libraries
   alcotest
   message-templates
