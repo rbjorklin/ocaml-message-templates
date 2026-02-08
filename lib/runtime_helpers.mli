@@ -71,7 +71,8 @@ val json_to_string : Yojson.Safe.t -> string
 (** {2 Template Rendering} *)
 
 val render_template : string -> (string * Yojson.Safe.t) list -> string
-(** Render a template by replacing {var} placeholders with values from properties *)
+(** Render a template by replacing [{var}] placeholders with values from
+    properties *)
 
 (** {2 Safe Conversions Module} *)
 
@@ -140,8 +141,8 @@ val get_current_timestamp_rfc3339 : unit -> string
 (** Get current timestamp as RFC3339 string - optimized for frequent calls *)
 
 val format_sink_template : string -> Log_event.t -> string
-(** Format a template string for sink output.
-    Replaces {timestamp}, {level}, and {message} placeholders. *)
+(** Format a template string for sink output. Replaces [{timestamp}], [{level}],
+    and [{message}] placeholders. *)
 
 val replace_all : string -> string -> string -> string
 (** Replace all occurrences of a pattern in a template with a replacement.
