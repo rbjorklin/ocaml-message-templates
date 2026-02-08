@@ -1,4 +1,9 @@
-(** Code generator for template expansion *)
+(** Code generator for template expansion
+
+    Note: This module uses runtime type conversion via
+    Runtime_helpers.generic_to_json because PPX expansion occurs before type
+    checking. Type-specific conversions cannot be performed at compile time. See
+    scope_analyzer.ml for details. *)
 
 open Ppxlib
 open Ast_builder.Default
@@ -21,55 +26,22 @@ let build_format_string parts =
   Buffer.contents buf
 ;;
 
-(** Convert a value to its Yojson representation based on type *)
-let rec yojson_of_value ~loc (expr : expression) (ty : core_type option) =
-  match ty with
-  | Some {ptyp_desc= Ptyp_constr ({txt= Lident "string"; _}, []); _} ->
-      [%expr `String [%e expr]]
-  | Some {ptyp_desc= Ptyp_constr ({txt= Lident "int"; _}, []); _} ->
-      [%expr `Int [%e expr]]
-  | Some {ptyp_desc= Ptyp_constr ({txt= Lident "float"; _}, []); _} ->
-      [%expr `Float [%e expr]]
-  | Some {ptyp_desc= Ptyp_constr ({txt= Lident "bool"; _}, []); _} ->
-      [%expr `Bool [%e expr]]
-  | Some {ptyp_desc= Ptyp_constr ({txt= Lident "int64"; _}, []); _} ->
-      [%expr `Intlit (Int64.to_string [%e expr])]
-  | Some {ptyp_desc= Ptyp_constr ({txt= Lident "int32"; _}, []); _} ->
-      [%expr `Intlit (Int32.to_string [%e expr])]
-  | Some {ptyp_desc= Ptyp_constr ({txt= Lident "nativeint"; _}, []); _} ->
-      [%expr `Intlit (Nativeint.to_string [%e expr])]
-  | Some {ptyp_desc= Ptyp_constr ({txt= Lident "char"; _}, []); _} ->
-      [%expr `String (String.make 1 [%e expr])]
-  | Some {ptyp_desc= Ptyp_constr ({txt= Lident "unit"; _}, []); _} ->
-      [%expr `Null]
-  | Some {ptyp_desc= Ptyp_constr ({txt= Lident "list"; _}, [elem_ty]); _} ->
-      (* For lists, we handle the element type recursively *)
-      let x_var = evar ~loc "x" in
-      let elem_converter = yojson_of_value ~loc x_var (Some elem_ty) in
-      [%expr `List (List.map (fun x -> [%e elem_converter]) [%e expr])]
-  | Some {ptyp_desc= Ptyp_constr ({txt= Lident "array"; _}, [elem_ty]); _} ->
-      let x_var = evar ~loc "x" in
-      let elem_converter = yojson_of_value ~loc x_var (Some elem_ty) in
-      [%expr
-        `List
-          (Array.to_list (Array.map (fun x -> [%e elem_converter]) [%e expr]))]
-  | Some {ptyp_desc= Ptyp_constr ({txt= Lident "option"; _}, [elem_ty]); _} ->
-      let x_var = evar ~loc "x" in
-      let elem_converter = yojson_of_value ~loc x_var (Some elem_ty) in
-      [%expr
-        match [%e expr] with
-        | None -> `Null
-        | Some x -> [%e elem_converter]]
-  | _ ->
-      (* Fallback: use generic conversion for unknown types. For best results,
-         use explicit type annotations in your templates. *)
-      [%expr Message_templates.Runtime_helpers.generic_to_json [%e expr]]
+(** Convert a value to its Yojson representation.
+
+    Type information is not available at PPX expansion time (PPX runs before the
+    type checker), so we always use the generic runtime conversion. The type
+    parameter is kept for API compatibility but is ignored. *)
+let yojson_of_value ~loc (expr : expression) (_ty : core_type option) =
+  [%expr Message_templates.Runtime_helpers.generic_to_json [%e expr]]
 ;;
 
-(** Apply operator-specific transformations *)
-let apply_operator ~loc op expr ty =
+(** Apply operator-specific transformations.
+
+    Note: The type parameter is not used since type information is not available
+    at PPX expansion time. It is kept for API compatibility. *)
+let apply_operator ~loc op expr _ty =
   match op with
-  | Default -> yojson_of_value ~loc expr ty
+  | Default -> yojson_of_value ~loc expr None
   | Structure ->
       (* Assume value is already Yojson.Safe.t or convert to string *)
       [%expr
@@ -86,7 +58,7 @@ let apply_operator ~loc op expr ty =
         | v -> `String (Yojson.Safe.to_string v)]
   | Stringify ->
       (* For stringify operator, convert to JSON first then to string *)
-      let json_expr = yojson_of_value ~loc expr ty in
+      let json_expr = yojson_of_value ~loc expr None in
       [%expr `String (Yojson.Safe.to_string [%e json_expr])]
 ;;
 

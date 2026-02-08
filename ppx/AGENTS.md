@@ -72,29 +72,35 @@ Source Code with [%template]
     Variable Scope Validation
             |
             v
-    Type Detection (compile-time)
-            |
-            v
     AST Generation (code_generator.ml)
             |
             v
-    Zero-overhead OCaml Code
+    OCaml Code with Runtime Type Conversion
 ```
+
+**Note:** Type detection at compile time is not possible because PPX expansion
+occurs before type checking. All template variables use runtime type conversion
+via `Runtime_helpers.generic_to_json`.
 
 ### Code Generation Dependencies
 - PPX in `code_generator.ml` generates references to `Message_templates.Runtime_helpers` functions
 - When modifying Runtime_helpers function names, must update BOTH `lib/runtime_helpers.ml` AND `ppx/code_generator.ml`
-- Generic type conversion (`generic_to_string`, `generic_to_json`) uses Obj module - required for fallback when compile-time type info unavailable
+- All template variables use `generic_to_string`/`generic_to_json` with Obj module for runtime type introspection
 
-### Type Conversion Fallback Chain
-1. PPX tries compile-time type detection first (int, string, float, etc.)
-2. Falls back to `Runtime_helpers.generic_to_json` for unknown types
-3. Obj module runtime inspection used only as last resort
+### Type Conversion (Simplified)
+
+PPX expansion occurs before type checking, so compile-time type detection is not
+possible. All template variables use `Runtime_helpers.generic_to_json` for JSON
+conversion, which performs runtime type introspection using the Obj module.
+
+1. PPX cannot determine types at compile time (runs before type checker)
+2. All variables use `generic_to_json` which inspects values at runtime
+3. Obj module is used for runtime type introspection
 
 ### Stringify Operator Code Path
 - `{$var}` generates call to `Runtime_helpers.generic_to_string` (not `generic_to_json`)
 - Stringify ALWAYS uses Obj fallback since it's for display, not JSON
-- Use explicit type annotations to avoid Obj overhead: `(var : int list)` instead of `$var`
+- Note: Explicit type annotations cannot avoid Obj overhead because PPX runs before type checking
 
 ### Build Dependencies
 - PPX must be built before test files that use `[%template]` or `[%log.*]` extensions
@@ -189,12 +195,17 @@ match format with
 ```
 
 ### Type Detection Extension
-Add new type patterns in code_generator:
-```ocaml
-match typ with
-| [%type: int list] -> generate_list_code expr
-| _ -> fallback_to_generic expr
-```
+
+**Note:** Type detection at PPX time is not currently implemented because PPX
+expansion occurs before type checking. The `ty` parameter in `yojson_of_value`
+is always `None`.
+
+If compile-time type detection is desired, it would require:
+1. New syntax for explicit type annotations in templates (e.g., `{(var : int)}`)
+2. Parser support for the new syntax
+3. Updated code generation to use type-specific converters
+
+For now, all type conversion is done at runtime via `generic_to_json`.
 
 ## Further Reading
 

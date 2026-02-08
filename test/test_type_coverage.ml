@@ -1,4 +1,9 @@
-(** Comprehensive type coverage tests for Message Templates *)
+(** Comprehensive type coverage tests for Message Templates
+
+    Note: Explicit type annotations in these tests are for documentation
+    clarity. The PPX extension runs before type checking, so it cannot use type
+    information to select specific converters. All template variables use
+    [generic_to_json] regardless of type annotations. *)
 
 open Alcotest
 

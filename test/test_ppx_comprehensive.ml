@@ -58,6 +58,9 @@ let test_empty_template () =
 ;;
 
 let test_mixed_types () =
+  (* Note: Explicit type annotations here are for documentation clarity. The PPX
+     runs before type checking, so it cannot use type information. All variables
+     use generic_to_json regardless of type annotations. *)
   let str_val : string = "text" in
   let int_val : int = 42 in
   let float_val : float = 3.14 in

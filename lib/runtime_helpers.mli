@@ -79,8 +79,12 @@ val render_template : string -> (string * Yojson.Safe.t) list -> string
 (** Composable type-safe conversions without Obj module usage.
 
     This module provides a type-safe way to build converters for complex types
-    by composing simple ones. Use these converters when you know the type at
-    compile time.
+    by composing simple ones. Use these converters when you want explicit
+    control over type conversion without relying on runtime type inspection.
+
+    Note: The PPX extension always uses [generic_to_json] for template variables
+    because PPX expansion occurs before type checking. This module is provided
+    for manual conversions when you need type-safe JSON generation.
 
     Example:
     {[
