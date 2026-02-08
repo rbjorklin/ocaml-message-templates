@@ -16,7 +16,7 @@
 type t
 
 val default_template : string
-(** Default console output template: "[{timestamp} {level}] {message}" *)
+(** Default console output template: "[{timestamp} [{level}] {message}]" *)
 
 val create :
      ?output_template:string
@@ -25,8 +25,9 @@ val create :
   -> unit
   -> t
 (** Create a console sink.
-    
-    @param output_template Output template with placeholders {timestamp}, {level}, {message}
+
+    @param output_template
+      Output template with placeholders [{timestamp}, {level}, {message}]
     @param colors Enable ANSI color codes (default: true)
     @param stderr_threshold Minimum level for stderr output (default: Error) *)
 

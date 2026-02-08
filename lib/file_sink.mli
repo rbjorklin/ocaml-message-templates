@@ -17,7 +17,7 @@ type rolling_interval =
 type t
 
 val default_template : string
-(** Default file output template: "{timestamp} [{level}] {message}" *)
+(** Default file output template: "[{timestamp} [{level}] {message}]" *)
 
 val create : ?output_template:string -> ?rolling:rolling_interval -> string -> t
 (** Create a file sink.

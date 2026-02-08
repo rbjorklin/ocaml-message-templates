@@ -1,0 +1,93 @@
+{0 Message Templates}
+
+Type-safe structured logging for OCaml with PPX support.
+
+{1 Overview}
+
+Message Templates is a high-performance structured logging library for OCaml that provides:
+
+- Type-safe message templates with compile-time validation via PPX
+- Structured JSON output in CLEF (Compact Log Event Format)
+- Multiple output sinks (console, file, JSON)
+- Log rotation (daily, hourly, by size)
+- Contextual properties that flow across function calls
+- Correlation ID support for distributed tracing
+- Zero overhead when logging is disabled
+
+{1 Quick Start}
+
+{[(* Configure and set global logger *)
+let logger =
+  Configuration.create ()
+  |> Configuration.write_to_console ~colors:true ()
+  |> Configuration.build
+in
+Log.set_logger logger;
+
+(* Log with structured data *)
+Log.information "User {username} logged in from {ip}"
+  [("username", `String "alice"); ("ip", `String "192.168.1.1")]
+]}
+
+{1 Using the PPX Extension}
+
+The PPX extension provides compile-time template validation and automatic variable capture:
+
+{[(* Template variables are validated at compile time *)
+let username = "alice" in
+let ip_address = "192.168.1.1" in
+[%log.info "User {username} logged in from {ip_address}"]
+
+(* Output CLEF JSON format *)
+let event = [%template "Processing {item_id}"] in
+]}
+
+{1 Core Modules}
+
+The library is organized into several key modules:
+
+{2 Types and Events}
+
+- Level - Log levels (Verbose, Debug, Information, Warning, Error, Fatal)
+- Log_event - Log event representation
+- Types - Core type definitions
+
+{2 Configuration and Logging}
+
+- Configuration - Fluent builder API for configuring loggers
+- Logger - Core logging functionality
+- Log - High-level logging interface
+- Log_context - Ambient context and correlation IDs
+
+{2 Sinks}
+
+- Sink - Sink interface definition
+- Console_sink - Console output with color support
+- File_sink - File output with rotation support
+- Json_sink - JSON output for structured logging
+- Composite_sink - Combine multiple sinks
+- Null_sink - Discard all log events
+
+{2 Advanced Features}
+
+- Template_parser - Message template parsing
+- Filter - Log filtering and enrichment
+- Circuit_breaker - Circuit breaker for resilient logging
+- Shutdown - Graceful shutdown handling
+
+{1 Installation}
+
+Add to your dune-project:
+
+{[(depends
+  (message-templates (>= 0.1.0)))]}
+
+For PPX support:
+
+{[(depends
+  (message-templates-ppx (>= 0.1.0)))]}
+
+{1 Documentation Links}
+
+- {{:https://github.com/ocaml-community/message-templates} GitHub Repository}
+- {{:https://messagetemplates.org/} Message Templates Specification}

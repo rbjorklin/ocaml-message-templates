@@ -3,7 +3,7 @@ name: Deploy API Documentation
 on:
   push:
     branches:
-      - deploy-doc
+      - main
 
 permissions: read-all
 
@@ -12,7 +12,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  deploy-doc:
+  deploy-odoc:
     name: Deploy odoc to GitHub Pages
 
     environment:
@@ -28,35 +28,25 @@ jobs:
 
     steps:
       - name: Checkout tree
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set-up OCaml
         uses: ocaml/setup-ocaml@v3
         with:
           ocaml-compiler: 5.4.0
           dune-cache: true
-          opam-pin: false
-
-      - name: Pin packages
-        run: |
-          for f in *.opam; do
-            opam pin add -yn "${f%.opam}" .
-          done
-        shell: bash
 
       - name: Install dependencies
         run: opam install . --deps-only --with-doc
-        shell: bash
 
       - name: Build documentation
         run: opam exec -- dune build @doc
-        shell: bash
 
       - name: Set-up Pages
         uses: actions/configure-pages@v5
 
       - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
+        uses: actions/upload-pages-artifact@v4
         with:
           path: _build/default/_doc/_html
 

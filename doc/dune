@@ -1,2 +1,5 @@
+(documentation
+ (package message-templates))
+
 (mdx
  (files ../MIGRATION.md ../DEPLOYMENT.md))
