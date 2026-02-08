@@ -225,3 +225,29 @@ All log events follow CLEF (Compact Log Event Format):
 - **Console sinks support colors**: Configurable with templates (ANSI codes)
 - **Follows Message Templates spec**: https://messagetemplates.org/
 - **When in plan mode you are allowed to write to**: .opencode/plans/
+
+## Cross-Cutting Concerns
+
+### Module Removal Checklist
+When removing a module, update these locations:
+1. Remove `.ml` and `.mli` files
+2. Remove from `lib/messageTemplates.ml` exports (if public)
+3. Remove test file from `test/dune` `(names ...)` list
+4. Remove corresponding `test/test_<module>.ml` file
+5. Check for references in `configuration.ml` or other config modules
+
+### Type Changes and Test Impact
+- Changing record types to tuples (like Circuit_breaker.stats) breaks test field access
+- Making abstract types (like Logger.t) breaks direct field access in configuration modules
+- Always search for type name in `test/` directory before refactoring
+
+### Obj Module Usage
+- Cannot fully remove Obj from runtime_helpers - PPX fallback requires it
+- Isolate Obj usage to `generic_to_string`/`generic_to_json` functions only
+- Document Obj dependency clearly for future maintainers
+
+### Synchronization Points
+These files must change together:
+- `lib/runtime_helpers.ml` ↔ `ppx/code_generator.ml` ↔ `ppx/ppx_log_levels.ml`
+- `lib/logger.ml` ↔ `lib/configuration.ml` (internal field access)
+- `lib/<module>.ml` ↔ `test/test_<module>.ml` (stats types, behavior changes)
