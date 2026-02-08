@@ -17,6 +17,12 @@ type template_part =
 
 type parsed_template = template_part list
 
+(** Property type for log events: name-value pair with JSON value *)
+type property = string * Yojson.Safe.t
+
+(** List of properties *)
+type property_list = property list
+
 (** Convert operator to string for debugging *)
 let string_of_operator = function
   | Default -> ""

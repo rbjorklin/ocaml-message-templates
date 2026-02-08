@@ -17,14 +17,16 @@ let to_int = function
   | Fatal -> 5
 ;;
 
-(** Convert level from string *)
-let of_string = function
-  | "Verbose" | "verbose" | "VRB" | "vrb" -> Some Verbose
-  | "Debug" | "debug" | "DBG" | "dbg" -> Some Debug
-  | "Information" | "information" | "INF" | "inf" -> Some Information
-  | "Warning" | "warning" | "WRN" | "wrn" -> Some Warning
-  | "Error" | "error" | "ERR" | "err" -> Some Error
-  | "Fatal" | "fatal" | "FTL" | "ftl" -> Some Fatal
+(** Convert level from string (case-insensitive) *)
+let of_string s =
+  let s = String.lowercase_ascii s in
+  match s with
+  | "verbose" | "vrb" -> Some Verbose
+  | "debug" | "dbg" -> Some Debug
+  | "information" | "inf" -> Some Information
+  | "warning" | "wrn" -> Some Warning
+  | "error" | "err" -> Some Error
+  | "fatal" | "ftl" -> Some Fatal
   | _ -> None
 ;;
 
@@ -56,3 +58,15 @@ let ( >= ) a b = compare a b >= 0
 
 (** Check if level a is less than level b *)
 let ( < ) a b = compare a b < 0
+
+(** Check if level a is greater than level b *)
+let ( > ) a b = compare a b > 0
+
+(** Check if level a is less than or equal to level b *)
+let ( <= ) a b = compare a b <= 0
+
+(** Check if two levels are equal *)
+let ( = ) a b = compare a b = 0
+
+(** Check if two levels are not equal *)
+let ( <> ) a b = compare a b <> 0

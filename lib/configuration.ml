@@ -36,6 +36,17 @@ let error config = minimum_level Level.Error config
 
 let fatal config = minimum_level Level.Fatal config
 
+(** Generic helper to add a sink from a sink implementation module *)
+let add_sink ?min_level ~create ~emit ~flush ~close config =
+  let sink = create () in
+  let sink_fn =
+    { Composite_sink.emit_fn= (fun event -> emit sink event)
+    ; flush_fn= (fun () -> flush sink)
+    ; close_fn= (fun () -> close sink) }
+  in
+  {config with sinks= {sink_fn; min_level} :: config.sinks}
+;;
+
 (** Add a file sink with optional minimum level override *)
 let write_to_file
     ?min_level
@@ -43,13 +54,9 @@ let write_to_file
     ?(output_template = File_sink.default_template)
     path
     config =
-  let file_sink = File_sink.create ~rolling ~output_template path in
-  let sink_fn =
-    { Composite_sink.emit_fn= (fun event -> File_sink.emit file_sink event)
-    ; flush_fn= (fun () -> File_sink.flush file_sink)
-    ; close_fn= (fun () -> File_sink.close file_sink) }
-  in
-  {config with sinks= {sink_fn; min_level} :: config.sinks}
+  add_sink ?min_level
+    ~create:(fun () -> File_sink.create ~rolling ~output_template path)
+    ~emit:File_sink.emit ~flush:File_sink.flush ~close:File_sink.close config
 ;;
 
 (** Add a console sink with optional minimum level override *)
@@ -60,26 +67,17 @@ let write_to_console
     ?(output_template = Console_sink.default_template)
     ()
     config =
-  let console_sink =
-    Console_sink.create ~colors ~stderr_threshold ~output_template ()
-  in
-  let sink_fn =
-    { Composite_sink.emit_fn= (fun event -> Console_sink.emit console_sink event)
-    ; flush_fn= (fun () -> Console_sink.flush console_sink)
-    ; close_fn= (fun () -> Console_sink.close console_sink) }
-  in
-  {config with sinks= {sink_fn; min_level} :: config.sinks}
+  add_sink ?min_level
+    ~create:(fun () ->
+      Console_sink.create ~colors ~stderr_threshold ~output_template () )
+    ~emit:Console_sink.emit ~flush:Console_sink.flush ~close:Console_sink.close
+    config
 ;;
 
 (** Add a null sink (discards all events) *)
 let write_to_null ?min_level () config =
-  let null_sink = Null_sink.create () in
-  let sink_fn =
-    { Composite_sink.emit_fn= (fun event -> Null_sink.emit null_sink event)
-    ; flush_fn= (fun () -> Null_sink.flush null_sink)
-    ; close_fn= (fun () -> Null_sink.close null_sink) }
-  in
-  {config with sinks= {sink_fn; min_level} :: config.sinks}
+  add_sink ?min_level ~create:Null_sink.create ~emit:Null_sink.emit
+    ~flush:Null_sink.flush ~close:Null_sink.close config
 ;;
 
 (** Add a custom sink function *)

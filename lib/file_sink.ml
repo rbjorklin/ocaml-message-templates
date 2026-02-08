@@ -68,6 +68,14 @@ let generate_path base_path rolling =
         Filename.concat dir (name ^ "-" ^ hour_str ^ ext)
 ;;
 
+(** Extract date tuple (year, mon, mday) from Unix.tm *)
+let to_date_tuple (tm : Unix.tm) = (tm.tm_year, tm.tm_mon, tm.tm_mday)
+
+(** Extract hour tuple (year, mon, mday, hour) from Unix.tm *)
+let to_hour_tuple (tm : Unix.tm) =
+  (tm.tm_year, tm.tm_mon, tm.tm_mday, tm.tm_hour)
+;;
+
 (** Check if we need to roll over *)
 let should_roll t current_time =
   match t.rolling with
@@ -75,20 +83,15 @@ let should_roll t current_time =
   | Daily ->
       let epoch_current = Ptime.to_float_s current_time in
       let epoch_last = Ptime.to_float_s t.last_roll_time in
-      let tm_current = Unix.gmtime epoch_current in
-      let tm_last = Unix.gmtime epoch_last in
-      tm_current.tm_year <> tm_last.tm_year
-      || tm_current.tm_mon <> tm_last.tm_mon
-      || tm_current.tm_mday <> tm_last.tm_mday
+      let current_day = to_date_tuple (Unix.gmtime epoch_current) in
+      let last_day = to_date_tuple (Unix.gmtime epoch_last) in
+      current_day <> last_day
   | Hourly ->
       let epoch_current = Ptime.to_float_s current_time in
       let epoch_last = Ptime.to_float_s t.last_roll_time in
-      let tm_current = Unix.gmtime epoch_current in
-      let tm_last = Unix.gmtime epoch_last in
-      tm_current.tm_year <> tm_last.tm_year
-      || tm_current.tm_mon <> tm_last.tm_mon
-      || tm_current.tm_mday <> tm_last.tm_mday
-      || tm_current.tm_hour <> tm_last.tm_hour
+      let current_hour = to_hour_tuple (Unix.gmtime epoch_current) in
+      let last_hour = to_hour_tuple (Unix.gmtime epoch_last) in
+      current_hour <> last_hour
 ;;
 
 (** Roll to a new file *)

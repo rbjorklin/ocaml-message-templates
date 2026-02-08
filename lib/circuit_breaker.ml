@@ -28,16 +28,17 @@ let create ~failure_threshold ~reset_timeout_ms () =
   ; lock= Mutex.create () }
 ;;
 
+(** Check if we should transition from Open to Half_open *)
+let try_transition_to_half_open t =
+  if t.state = Open then
+    let elapsed = get_time_ms () -. t.last_failure_time in
+    if elapsed >= float_of_int t.reset_timeout_ms then
+      t.state <- Half_open
+;;
+
 let get_state t =
   Mutex.lock t.lock;
-  let current_state = t.state in
-
-  (* Check if we should transition from Open to Half_open *)
-  ( if current_state = Open then
-      let elapsed = get_time_ms () -. t.last_failure_time in
-      if elapsed >= float_of_int t.reset_timeout_ms then
-        t.state <- Half_open );
-
+  try_transition_to_half_open t;
   let result = t.state in
   Mutex.unlock t.lock; result
 ;;
@@ -57,12 +58,7 @@ let record_failure t =
 
 let call t f =
   Mutex.lock t.lock;
-
-  (* Check if we should transition from Open to Half_open *)
-  ( if t.state = Open then
-      let elapsed = get_time_ms () -. t.last_failure_time in
-      if elapsed >= float_of_int t.reset_timeout_ms then
-        t.state <- Half_open );
+  try_transition_to_half_open t;
 
   let can_attempt = t.state <> Open in
 
