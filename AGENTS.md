@@ -207,6 +207,7 @@ cat _build/_tests/latest/*.output
 
 ### Rate Limits
 - Run tests after every significant change
+- Run examples after every significant change
 - Run format check before committing
 - Run benchmarks when performance-critical code changes
 
