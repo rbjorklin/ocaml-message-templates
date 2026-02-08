@@ -12,6 +12,7 @@ module File_sink = File_sink
 module Json_sink = Json_sink
 module Null_sink = Null_sink
 module Composite_sink = Composite_sink
+module Logger_core = Logger_core
 module Logger = Logger
 module Filter = Filter
 module Configuration = Configuration

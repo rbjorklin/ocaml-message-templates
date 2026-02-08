@@ -1,134 +1,86 @@
-(** Lwt logger - async logger implementation *)
+(** Lwt logger - async logger implementation using Logger_core *)
 
 open Message_templates
 open Lwt.Syntax
 
-(** Logger implementation type *)
-type t =
-  { min_level: Level.t
-  ; sinks: (Lwt_sink.sink_fn * Level.t option) list
-  ; enrichers: (Log_event.t -> Log_event.t) list
-  ; filters: (Log_event.t -> bool) list
-  ; context_properties: (string * Yojson.Safe.t) list
-  ; source: string option }
+(** Lwt monad implementation *)
+module Lwt_monad = struct
+  type 'a t = 'a Lwt.t
+
+  let return = Lwt.return
+
+  let bind = Lwt.bind
+
+  let iter_p = Lwt_list.iter_p
+end
+
+(** Sink function adapter for Lwt *)
+module Lwt_sink_fn = struct
+  type sink = Lwt_sink.sink_fn
+
+  let emit_fn sink event = sink.Lwt_sink.emit_fn event
+
+  let flush_fn sink = sink.Lwt_sink.flush_fn ()
+
+  let close_fn sink = sink.Lwt_sink.close_fn ()
+end
+
+(** Instantiate the logger core with Lwt monad *)
+module Lwt_logger_core = Logger_core.Make (Lwt_monad) (Lwt_sink_fn)
+
+(** Logger type *)
+type t = Lwt_logger_core.t
+
+(** Create a logger *)
+let create ~min_level ~sinks = Lwt_logger_core.create ~min_level ~sinks
+
+(** Write a log event - returns Lwt promise *)
+let write t ?exn level message properties =
+  Lwt_logger_core.write t ?exn level message properties
+;;
 
 (** Check if a level is enabled *)
-let is_enabled t level = Level.compare level t.min_level >= 0
-
-(** Check if event passes all filters *)
-let passes_filters t event = List.for_all (fun filter -> filter event) t.filters
-
-(** Apply all enrichers to an event *)
-let apply_enrichers t event =
-  List.fold_left (fun ev enricher -> enricher ev) event t.enrichers
-;;
-
-(** Add context properties to an event *)
-let add_context_properties t event =
-  let ambient_props = Log_context.current_properties () in
-  let correlation_id = Log_context.get_correlation_id () in
-  if ambient_props = [] && t.context_properties = [] && correlation_id = None
-  then
-    event
-  else
-    let current_props = Log_event.get_properties event in
-    let new_props = ambient_props @ t.context_properties @ current_props in
-    Log_event.create
-      ~timestamp:(Log_event.get_timestamp event)
-      ~level:(Log_event.get_level event)
-      ~message_template:(Log_event.get_message_template event)
-      ~rendered_message:(Log_event.get_rendered_message event)
-      ~properties:new_props
-      ?exception_info:(Log_event.get_exception event)
-      ?correlation_id:
-        ( match correlation_id with
-        | None -> Log_event.get_correlation_id event
-        | Some _ -> correlation_id )
-      ()
-;;
-
-(** Core write method *)
-let write t ?exn level message_template properties =
-  if not (is_enabled t level) then
-    Lwt.return ()
-  else
-    let rendered_message =
-      Runtime_helpers.render_template message_template properties
-    in
-    let correlation_id = Log_context.get_correlation_id () in
-    let event =
-      Log_event.create ~level ~message_template ~rendered_message ~properties
-        ?exception_info:exn ?correlation_id ()
-    in
-    let event = apply_enrichers t event in
-    let event = add_context_properties t event in
-    if not (passes_filters t event) then
-      Lwt.return ()
-    else
-      (* Emit to all sinks with per-sink level filtering *)
-      let* () =
-        Lwt_list.iter_p
-          (fun (sink_fn, min_level) ->
-            match min_level with
-            | Some min_lvl when Level.compare level min_lvl < 0 -> Lwt.return ()
-            | _ -> sink_fn.Lwt_sink.emit_fn event )
-          t.sinks
-      in
-      Lwt.return ()
-;;
+let is_enabled = Lwt_logger_core.is_enabled
 
 (** Level-specific convenience methods *)
 let verbose t ?exn message properties =
-  write t ?exn Level.Verbose message properties
+  Lwt_logger_core.verbose t ?exn message properties
 ;;
 
 let debug t ?exn message properties =
-  write t ?exn Level.Debug message properties
+  Lwt_logger_core.debug t ?exn message properties
 ;;
 
 let information t ?exn message properties =
-  write t ?exn Level.Information message properties
+  Lwt_logger_core.information t ?exn message properties
 ;;
 
 let warning t ?exn message properties =
-  write t ?exn Level.Warning message properties
+  Lwt_logger_core.warning t ?exn message properties
 ;;
 
 let error t ?exn message properties =
-  write t ?exn Level.Error message properties
+  Lwt_logger_core.error t ?exn message properties
 ;;
 
 let fatal t ?exn message properties =
-  write t ?exn Level.Fatal message properties
+  Lwt_logger_core.fatal t ?exn message properties
 ;;
 
-(** Create a contextual logger with additional property *)
-let for_context t name value =
-  {t with context_properties= (name, value) :: t.context_properties}
-;;
+(** Context and enrichment *)
+let for_context = Lwt_logger_core.for_context
 
-(** Add an enricher function *)
-let with_enricher t enricher = {t with enrichers= enricher :: t.enrichers}
+let with_enricher = Lwt_logger_core.with_enricher
 
-(** Create a sub-logger for a specific source *)
-let for_source t source_name = {t with source= Some source_name}
+let for_source = Lwt_logger_core.for_source
 
-(** Create a logger *)
-let create ~min_level ~sinks =
-  { min_level
-  ; sinks
-  ; enrichers= []
-  ; filters= []
-  ; context_properties= []
-  ; source= None }
-;;
+(** Filters *)
+let add_filter = Lwt_logger_core.add_filter
+
+let add_min_level_filter = Lwt_logger_core.add_min_level_filter
 
 (** Flush all sinks *)
-let flush t =
-  Lwt_list.iter_p (fun (sink_fn, _) -> sink_fn.Lwt_sink.flush_fn ()) t.sinks
-;;
+let flush t = Lwt_logger_core.flush t
 
 (** Close all sinks *)
-let close t =
-  Lwt_list.iter_p (fun (sink_fn, _) -> sink_fn.Lwt_sink.close_fn ()) t.sinks
-;;
+let close t = Lwt_logger_core.close t

@@ -1,4 +1,5 @@
-(** Logger implementation with level checking and enrichment *)
+(** Logger implementation with level checking and enrichment - now using
+    Logger_core *)
 
 (** Enricher signature *)
 module type ENRICHER = sig
@@ -47,152 +48,86 @@ module type S = sig
   val close : t -> unit
 end
 
-(** Logger implementation type *)
-type logger_impl =
-  { min_level: Level.t
-  ; sinks: (Composite_sink.sink_fn * Level.t option) list
-  ; enrichers: (Log_event.t -> Log_event.t) list
-  ; filters: (Log_event.t -> bool) list
-  ; context_properties: (string * Yojson.Safe.t) list
-  ; source: string option }
+(** Sink function adapter for Logger_core *)
+module Sync_sink_fn = struct
+  type sink = Composite_sink.sink_fn
 
-type t = logger_impl
+  let emit_fn sink event =
+    sink.Composite_sink.emit_fn event;
+    ()
+  ;;
+
+  let flush_fn sink =
+    sink.Composite_sink.flush_fn ();
+    ()
+  ;;
+
+  let close_fn sink =
+    sink.Composite_sink.close_fn ();
+    ()
+  ;;
+end
+
+(** Instantiate the logger core with Identity monad *)
+module Sync_logger = Logger_core.Make (Logger_core.Identity) (Sync_sink_fn)
+
+(** Logger type is the concrete instantiation *)
+type t = Sync_logger.t
+
+(** Create a logger *)
+let create ~min_level ~sinks = Sync_logger.create ~min_level ~sinks
+
+(** Write a log event *)
+let write t ?exn level message properties =
+  ignore (Sync_logger.write t ?exn level message properties)
+;;
 
 (** Check if a level is enabled *)
-let is_enabled t level = Level.compare level t.min_level >= 0
-
-(** Check if event passes all filters *)
-let passes_filters t event = List.for_all (fun filter -> filter event) t.filters
-
-(** Apply all enrichers to an event *)
-let apply_enrichers t event =
-  List.fold_left (fun ev enricher -> enricher ev) event t.enrichers
-;;
-
-(** Add context properties to an event *)
-let add_context_properties t event =
-  let ambient_props = Log_context.current_properties () in
-  let correlation_id = Log_context.get_correlation_id () in
-  if ambient_props = [] && t.context_properties = [] && correlation_id = None
-  then
-    event
-  else
-    let current_props = Log_event.get_properties event in
-    (* Merge: ambient context first, then logger context, then event
-       properties *)
-    let new_props = ambient_props @ t.context_properties @ current_props in
-    (* Re-create event with merged properties and correlation ID *)
-    Log_event.create
-      ~timestamp:(Log_event.get_timestamp event)
-      ~level:(Log_event.get_level event)
-      ~message_template:(Log_event.get_message_template event)
-      ~rendered_message:(Log_event.get_rendered_message event)
-      ~properties:new_props
-      ?exception_info:(Log_event.get_exception event)
-      ?correlation_id:
-        ( match correlation_id with
-        | None -> Log_event.get_correlation_id event
-        | Some _ -> correlation_id )
-      ()
-;;
-
-(** Core write method *)
-let write t ?exn level message_template properties =
-  (* Fast path: check minimum level first *)
-  if not (is_enabled t level) then
-    ()
-  else
-    (* Create the log event *)
-    let rendered_message =
-      Runtime_helpers.render_template message_template properties
-    in
-    let correlation_id = Log_context.get_correlation_id () in
-    let event =
-      Log_event.create ~level ~message_template ~rendered_message ~properties
-        ?exception_info:exn ?correlation_id ()
-    in
-
-    (* Apply enrichment pipeline *)
-    let event = apply_enrichers t event in
-    let event = add_context_properties t event in
-
-    (* Check filters *)
-    if not (passes_filters t event) then
-      ()
-    else
-      (* Emit to all sinks with per-sink level filtering *)
-      List.iter
-        (fun (sink_fn, min_level) ->
-          match min_level with
-          | Some min_lvl when Level.compare level min_lvl < 0 -> ()
-          | _ -> sink_fn.Composite_sink.emit_fn event )
-        t.sinks
-;;
+let is_enabled = Sync_logger.is_enabled
 
 (** Level-specific convenience methods *)
 let verbose t ?exn message properties =
-  write t ?exn Level.Verbose message properties
+  ignore (Sync_logger.verbose t ?exn message properties)
 ;;
 
 let debug t ?exn message properties =
-  write t ?exn Level.Debug message properties
+  ignore (Sync_logger.debug t ?exn message properties)
 ;;
 
 let information t ?exn message properties =
-  write t ?exn Level.Information message properties
+  ignore (Sync_logger.information t ?exn message properties)
 ;;
 
 let warning t ?exn message properties =
-  write t ?exn Level.Warning message properties
+  ignore (Sync_logger.warning t ?exn message properties)
 ;;
 
 let error t ?exn message properties =
-  write t ?exn Level.Error message properties
+  ignore (Sync_logger.error t ?exn message properties)
 ;;
 
 let fatal t ?exn message properties =
-  write t ?exn Level.Fatal message properties
+  ignore (Sync_logger.fatal t ?exn message properties)
 ;;
 
-(** Create a contextual logger with additional property *)
-let for_context t name value =
-  {t with context_properties= (name, value) :: t.context_properties}
-;;
+(** Context and enrichment *)
+let for_context = Sync_logger.for_context
 
-(** Add an enricher function *)
-let with_enricher t enricher = {t with enrichers= enricher :: t.enrichers}
+let with_enricher = Sync_logger.with_enricher
 
-(** Create a sub-logger for a specific source *)
-let for_source t source_name = {t with source= Some source_name}
-
-(** Create a logger *)
-let create ~min_level ~sinks =
-  { min_level
-  ; sinks
-  ; enrichers= []
-  ; filters= []
-  ; context_properties= []
-  ; source= None }
-;;
+let for_source = Sync_logger.for_source
 
 (** Helper to add a property to context *)
 let add_property t name value = for_context t name value
 
 (** Helper to add a minimum level filter *)
-let add_min_level_filter t min_level =
-  let filter event = Level.compare (Log_event.get_level event) min_level >= 0 in
-  {t with filters= filter :: t.filters}
-;;
+let add_min_level_filter = Sync_logger.add_min_level_filter
 
 (** Add a custom filter function *)
-let add_filter t filter = {t with filters= filter :: t.filters}
+let add_filter = Sync_logger.add_filter
 
 (** Flush all sinks *)
-let flush t =
-  List.iter (fun (sink_fn, _) -> sink_fn.Composite_sink.flush_fn ()) t.sinks
-;;
+let flush t = ignore (Sync_logger.flush t)
 
 (** Close all sinks *)
-let close t =
-  List.iter (fun (sink_fn, _) -> sink_fn.Composite_sink.close_fn ()) t.sinks
-;;
+let close t = ignore (Sync_logger.close t)

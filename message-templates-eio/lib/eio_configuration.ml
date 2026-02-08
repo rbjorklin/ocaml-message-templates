@@ -152,7 +152,9 @@ let create_logger ?sw config =
       logger config.enrichers
   in
   let logger =
-    {logger with Eio_logger.filters= config.filters @ logger.Eio_logger.filters}
+    List.fold_left
+      (fun log filter -> Eio_logger.add_filter log filter)
+      logger config.filters
   in
   let logger =
     List.fold_left

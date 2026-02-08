@@ -1,113 +1,79 @@
-(** Eio logger - sync logger implementation for Eio fibers *)
+(** Eio logger - sync logger implementation for Eio fibers using Logger_core *)
 
 open Message_templates
 
-(** Logger implementation type *)
+(** Eio uses direct style (like sync), so we use Identity monad *)
+module Eio_monad = Logger_core.Identity
+
+(** Sink function adapter for Eio *)
+module Eio_sink_fn = struct
+  type sink = Eio_sink.sink_fn
+
+  let emit_fn sink event =
+    sink.Eio_sink.emit_fn event;
+    ()
+  ;;
+
+  let flush_fn sink = sink.Eio_sink.flush_fn (); ()
+
+  let close_fn sink = sink.Eio_sink.close_fn (); ()
+end
+
+(** Instantiate the logger core with Identity monad *)
+module Eio_logger_core = Logger_core.Make (Eio_monad) (Eio_sink_fn)
+
+(** Logger type with optional switch for async operations *)
 type t =
-  { min_level: Level.t
-  ; sinks: (Eio_sink.sink_fn * Level.t option) list
-  ; enrichers: (Log_event.t -> Log_event.t) list
-  ; filters: (Log_event.t -> bool) list
-  ; context_properties: (string * Yojson.Safe.t) list
-  ; source: string option
+  { core: Eio_logger_core.t
   ; sw: Eio.Switch.t option }
 
-(** Check if a level is enabled *)
-let is_enabled t level = Level.compare level t.min_level >= 0
-
-(** Check if event passes all filters *)
-let passes_filters t event = List.for_all (fun filter -> filter event) t.filters
-
-(** Apply all enrichers to an event *)
-let apply_enrichers t event =
-  List.fold_left (fun ev enricher -> enricher ev) event t.enrichers
+(** Create a logger *)
+let create ?sw ~min_level ~sinks () =
+  {core= Eio_logger_core.create ~min_level ~sinks; sw}
 ;;
 
-(** Add context properties to an event *)
-let add_context_properties t event =
-  let ambient_props = Log_context.current_properties () in
-  let correlation_id = Log_context.get_correlation_id () in
-  if ambient_props = [] && t.context_properties = [] && correlation_id = None
-  then
-    event
-  else
-    let current_props = Log_event.get_properties event in
-    let new_props = ambient_props @ t.context_properties @ current_props in
-    Log_event.create
-      ~timestamp:(Log_event.get_timestamp event)
-      ~level:(Log_event.get_level event)
-      ~message_template:(Log_event.get_message_template event)
-      ~rendered_message:(Log_event.get_rendered_message event)
-      ~properties:new_props
-      ?exception_info:(Log_event.get_exception event)
-      ?correlation_id:
-        ( match correlation_id with
-        | None -> Log_event.get_correlation_id event
-        | Some _ -> correlation_id )
-      ()
-;;
-
-(** Core write method *)
-let write t ?exn level message_template properties =
-  if not (is_enabled t level) then
-    ()
-  else
-    let rendered_message =
-      Runtime_helpers.render_template message_template properties
-    in
-    let correlation_id = Log_context.get_correlation_id () in
-    let event =
-      Log_event.create ~level ~message_template ~rendered_message ~properties
-        ?exception_info:exn ?correlation_id ()
-    in
-    let event = apply_enrichers t event in
-    let event = add_context_properties t event in
-    if not (passes_filters t event) then
-      ()
-    else
-      (* Emit to all sinks with per-sink level filtering *)
-      List.iter
-        (fun (sink_fn, min_level) ->
-          match min_level with
-          | Some min_lvl when Level.compare level min_lvl < 0 -> ()
-          | _ -> sink_fn.Eio_sink.emit_fn event )
-        t.sinks
+(** Write a log event - synchronous *)
+let write t ?exn level message properties =
+  ignore (Eio_logger_core.write t.core ?exn level message properties)
 ;;
 
 (** Fire-and-forget logging - runs in background fiber *)
-let write_async t ?exn level message_template properties =
+let write_async t ?exn level message properties =
   match t.sw with
   | Some sw ->
       Eio.Fiber.fork ~sw (fun () ->
-          try write t ?exn level message_template properties
+          try write t ?exn level message properties
           with exn ->
             Printf.eprintf "Logging error: %s\n" (Printexc.to_string exn) )
-  | None -> write t ?exn level message_template properties
+  | None -> write t ?exn level message properties
 ;;
 
-(** Level-specific convenience methods *)
+(** Check if a level is enabled *)
+let is_enabled t = Eio_logger_core.is_enabled t.core
+
+(** Level-specific convenience methods - synchronous *)
 let verbose t ?exn message properties =
-  write t ?exn Level.Verbose message properties
+  ignore (Eio_logger_core.verbose t.core ?exn message properties)
 ;;
 
 let debug t ?exn message properties =
-  write t ?exn Level.Debug message properties
+  ignore (Eio_logger_core.debug t.core ?exn message properties)
 ;;
 
 let information t ?exn message properties =
-  write t ?exn Level.Information message properties
+  ignore (Eio_logger_core.information t.core ?exn message properties)
 ;;
 
 let warning t ?exn message properties =
-  write t ?exn Level.Warning message properties
+  ignore (Eio_logger_core.warning t.core ?exn message properties)
 ;;
 
 let error t ?exn message properties =
-  write t ?exn Level.Error message properties
+  ignore (Eio_logger_core.error t.core ?exn message properties)
 ;;
 
 let fatal t ?exn message properties =
-  write t ?exn Level.Fatal message properties
+  ignore (Eio_logger_core.fatal t.core ?exn message properties)
 ;;
 
 (** Async level-specific convenience methods *)
@@ -135,34 +101,26 @@ let fatal_async t ?exn message properties =
   write_async t ?exn Level.Fatal message properties
 ;;
 
-(** Create a contextual logger with additional property *)
+(** Context and enrichment *)
 let for_context t name value =
-  {t with context_properties= (name, value) :: t.context_properties}
+  {t with core= Eio_logger_core.for_context t.core name value}
 ;;
 
-(** Add an enricher function *)
-let with_enricher t enricher = {t with enrichers= enricher :: t.enrichers}
+let with_enricher t enricher =
+  {t with core= Eio_logger_core.with_enricher t.core enricher}
+;;
 
-(** Create a sub-logger for a specific source *)
-let for_source t source_name = {t with source= Some source_name}
+let for_source t source = {t with core= Eio_logger_core.for_source t.core source}
 
-(** Create a logger *)
-let create ?sw ~min_level ~sinks () =
-  { min_level
-  ; sinks
-  ; enrichers= []
-  ; filters= []
-  ; context_properties= []
-  ; source= None
-  ; sw }
+(** Filters *)
+let add_filter t filter = {t with core= Eio_logger_core.add_filter t.core filter}
+
+let add_min_level_filter t level =
+  {t with core= Eio_logger_core.add_min_level_filter t.core level}
 ;;
 
 (** Flush all sinks *)
-let flush t =
-  List.iter (fun (sink_fn, _) -> sink_fn.Eio_sink.flush_fn ()) t.sinks
-;;
+let flush t = ignore (Eio_logger_core.flush t.core)
 
 (** Close all sinks *)
-let close t =
-  List.iter (fun (sink_fn, _) -> sink_fn.Eio_sink.close_fn ()) t.sinks
-;;
+let close t = ignore (Eio_logger_core.close t.core)

@@ -168,7 +168,9 @@ let create_logger config =
       logger config.enrichers
   in
   let logger =
-    {logger with Lwt_logger.filters= config.filters @ logger.Lwt_logger.filters}
+    List.fold_left
+      (fun log filter -> Lwt_logger.add_filter log filter)
+      logger config.filters
   in
   let logger =
     List.fold_left
