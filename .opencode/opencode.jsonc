@@ -4,6 +4,9 @@
   "lsp": {},
   "permission": {
     "lsp": "allow"
+    "external_directory": {
+      "$OPAM_SWITCH_PREFIX/**": "allow"
+    }
   },
   "theme": "opencode",
   // https://opencode.ai/docs/config/#instructions
