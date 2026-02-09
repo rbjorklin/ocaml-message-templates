@@ -20,7 +20,7 @@ Message Templates is a high-performance structured logging library for OCaml tha
 let logger =
   Configuration.create ()
   |> Configuration.write_to_console ~colors:true ()
-  |> Configuration.build
+  |> Configuration.create_logger
 in
 Log.set_logger logger;
 
@@ -36,7 +36,7 @@ The PPX extension provides compile-time template validation and automatic variab
 {[(* Template variables are validated at compile time *)
 let username = "alice" in
 let ip_address = "192.168.1.1" in
-[%log.info "User {username} logged in from {ip_address}"]
+[%log.information "User {username} logged in from {ip_address}"]
 
 (* Output CLEF JSON format *)
 let event = [%template "Processing {item_id}"] in
