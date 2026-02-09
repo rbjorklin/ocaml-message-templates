@@ -3,6 +3,29 @@
  (libraries message-templates yojson unix core_bench core core_unix)
  (preprocess
   (pps message-templates-ppx ppx_bench))
+ (modules benchmark)
+ (modes byte exe))
+
+; Lwt async benchmarks
+
+(executable
+ (name benchmark_lwt)
+ (libraries message-templates message-templates-lwt yojson unix core_bench
+   core core_unix lwt lwt.unix)
+ (preprocess
+  (pps message-templates-ppx ppx_bench))
+ (modules benchmark_lwt)
+ (modes byte exe))
+
+; Eio async benchmarks
+
+(executable
+ (name benchmark_eio)
+ (libraries message-templates message-templates-eio yojson unix core_bench
+   core core_unix eio)
+ (preprocess
+  (pps message-templates-ppx ppx_bench))
+ (modules benchmark_eio)
  (modes byte exe))
 
 ; Run benchmarks with: dune build @bench
@@ -11,3 +34,13 @@
  (alias bench)
  (action
   (run ./benchmark.exe -ascii -quota 1)))
+
+(rule
+ (alias bench-lwt)
+ (action
+  (run ./benchmark_lwt.exe -ascii -quota 1)))
+
+(rule
+ (alias bench-eio)
+ (action
+  (run ./benchmark_eio.exe -ascii -quota 1)))
