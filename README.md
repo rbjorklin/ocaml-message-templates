@@ -2,6 +2,8 @@
 
 PPX-based library for compile-time validated message templates with structured logging.
 
+:warning: This project is fully AI generated and therefore will surely include some inaccuracies or straight up lies. The owner of this repo does not suggest anyone use this in production as it relies heavily on `Obj` usage. The library has known problems like the fact that it cannot distinguish between the bools and integers of the value `0` or `1` because of how they are represented in the runtime. More complex types like `Maps` and `Sets` also end up with very verbose and unclear output formats. :warning:
+
 ## Features
 
 - Compile-time template validation with automatic variable capture from scope
